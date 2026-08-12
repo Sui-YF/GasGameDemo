@@ -1,7 +1,7 @@
 import unreal
 
 player = unreal.EditorAssetLibrary.load_asset("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter")
-anim_class = unreal.load_class(None, "/Game/LanFang/Animations/In-Place/MoveBasic/Female_AnimBP.Female_AnimBP_C")
+anim_class = unreal.load_class(None, "/Game/CVAD/Animations/ABP_LanFang_Normal.ABP_LanFang_Normal_C")
 if player and anim_class:
     mesh = unreal.get_default_object(player.generated_class()).get_editor_property("mesh")
     mesh.set_editor_property("animation_mode", unreal.AnimationMode.ANIMATION_BLUEPRINT)

@@ -20,10 +20,80 @@
 #include "Animation/BlendSpace1D.h"
 #include "Animation/AnimSequence.h"
 #include "AnimGraphNode_BlendSpacePlayer.h"
+#include "AnimGraphNode_Root.h"
+#include "AnimGraphNode_Slot.h"
+#include "EdGraph/EdGraphPin.h"
+#include "EdGraph/EdGraphSchema.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
 namespace
 {
+    bool InsertCombatSlot(UAnimBlueprint* Blueprint)
+    {
+        if (!Blueprint) return false;
+        TArray<UEdGraph*> Graphs;
+        Blueprint->GetAllGraphs(Graphs);
+        for (UEdGraph* Graph : Graphs)
+        {
+            TArray<UAnimGraphNode_Root*> Roots;
+            Graph->GetNodesOfClass(Roots);
+            if (Roots.Num() != 1) continue;
+
+            for (UEdGraphNode* Existing : Graph->Nodes)
+            {
+                if (const UAnimGraphNode_Slot* ExistingSlot = Cast<UAnimGraphNode_Slot>(Existing))
+                {
+                    if (ExistingSlot->Node.SlotName == TEXT("UpperBody")) return true;
+                }
+            }
+
+            UEdGraphPin* RootInput = nullptr;
+            for (UEdGraphPin* Pin : Roots[0]->Pins)
+            {
+                if (Pin && Pin->Direction == EGPD_Input) { RootInput = Pin; break; }
+            }
+            if (!RootInput || RootInput->LinkedTo.Num() != 1) continue;
+            UEdGraphPin* LocomotionOutput = RootInput->LinkedTo[0];
+
+            FGraphNodeCreator<UAnimGraphNode_Slot> Creator(*Graph);
+            UAnimGraphNode_Slot* Slot = Creator.CreateNode();
+            Slot->Node.SlotName = TEXT("UpperBody");
+            Slot->Node.bAlwaysUpdateSourcePose = true;
+            Slot->NodePosX = Roots[0]->NodePosX - 240;
+            Slot->NodePosY = Roots[0]->NodePosY;
+            Creator.Finalize();
+
+            UEdGraphPin* SlotInput = nullptr;
+            UEdGraphPin* SlotOutput = nullptr;
+            for (UEdGraphPin* Pin : Slot->Pins)
+            {
+                if (!Pin) continue;
+                if (Pin->Direction == EGPD_Input && !SlotInput) SlotInput = Pin;
+                if (Pin->Direction == EGPD_Output && !SlotOutput) SlotOutput = Pin;
+            }
+            if (!SlotInput || !SlotOutput) return false;
+            RootInput->BreakAllPinLinks();
+            const UEdGraphSchema* Schema = Graph->GetSchema();
+            if (!Schema->TryCreateConnection(LocomotionOutput, SlotInput) ||
+                !Schema->TryCreateConnection(SlotOutput, RootInput)) return false;
+            return true;
+        }
+        return false;
+    }
+
+    bool SaveAnimBlueprint(UAnimBlueprint* Blueprint)
+    {
+        if (!Blueprint || !InsertCombatSlot(Blueprint)) return false;
+        FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+        FKismetEditorUtilities::CompileBlueprint(Blueprint);
+        Blueprint->MarkPackageDirty();
+        UPackage* Package = Blueprint->GetOutermost();
+        FSavePackageArgs Args;
+        Args.TopLevelFlags = RF_Public | RF_Standalone;
+        return UPackage::SavePackage(Package, Blueprint,
+            *FPackageName::LongPackageNameToFilename(Package->GetName(), FPackageName::GetAssetPackageExtension()), Args);
+    }
+
     UWidgetBlueprint* LoadWidgetBlueprint(const TCHAR* Path)
     {
         return LoadObject<UWidgetBlueprint>(nullptr, Path);
@@ -161,6 +231,15 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
         TEXT("/Game/LanFang/Animations/RootMotion/FlyingSwords/Anim_FS_Run.Anim_FS_Run"));
     if (!SourceBlueprint || !SourceBlend || !Idle || !Walk || !Run) return false;
 
+    UPackage* NormalPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_Normal"));
+    UAnimBlueprint* NormalBlueprint = FindObject<UAnimBlueprint>(NormalPackage, TEXT("ABP_LanFang_Normal"));
+    if (!NormalBlueprint)
+    {
+        NormalBlueprint = Cast<UAnimBlueprint>(StaticDuplicateObject(SourceBlueprint, NormalPackage, TEXT("ABP_LanFang_Normal")));
+        FAssetRegistryModule::AssetCreated(NormalBlueprint);
+    }
+    if (!SaveAnimBlueprint(NormalBlueprint)) return false;
+
     UPackage* BlendPackage = CreatePackage(TEXT("/Game/CVAD/Animations/BS_LanFang_FlyingSword"));
     UBlendSpace1D* FlyingBlend = FindObject<UBlendSpace1D>(BlendPackage, TEXT("BS_LanFang_FlyingSword"));
     if (!FlyingBlend)
@@ -200,17 +279,13 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
     if (ReplacedPlayers == 0) return false;
 
     FlyingBlend->MarkPackageDirty();
-    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(FlyingBlueprint);
-    FKismetEditorUtilities::CompileBlueprint(FlyingBlueprint);
-    FlyingBlueprint->MarkPackageDirty();
+    if (!SaveAnimBlueprint(FlyingBlueprint)) return false;
 
     FSavePackageArgs SaveArgs;
     SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
     UPackage::SavePackage(BlendPackage, FlyingBlend,
         *FPackageName::LongPackageNameToFilename(BlendPackage->GetName(), FPackageName::GetAssetPackageExtension()), SaveArgs);
-    UPackage::SavePackage(BlueprintPackage, FlyingBlueprint,
-        *FPackageName::LongPackageNameToFilename(BlueprintPackage->GetName(), FPackageName::GetAssetPackageExtension()), SaveArgs);
-    UE_LOG(LogTemp, Display, TEXT("CVAD flying sword AnimBP built; replaced blend players=%d"), ReplacedPlayers);
+    UE_LOG(LogTemp, Display, TEXT("CVAD combat AnimBPs built with UpperBody slot; flying blend players=%d"), ReplacedPlayers);
     return true;
 }
 

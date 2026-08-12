@@ -10,6 +10,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "TimerManager.h"
 #include "UObject/ConstructorHelpers.h"
 #include "Net/UnrealNetwork.h"
@@ -375,17 +376,36 @@ void ACVADCharacter::PlayActionAnimationLocal(UAnimSequenceBase* Animation)
 void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
 {
     if (!Animation || !GetMesh()) return;
+    // Slot playback keeps the locomotion AnimBP alive, so CharacterMovement, jumping and
+    // stance-specific state machines continue evaluating underneath the action animation.
+    RestoreLocomotionAnimation();
     bActionAnimationPlaying = true;
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
     GetWorldTimerManager().ClearTimer(ActionAnimationTimer);
-    GetMesh()->PlayAnimation(Animation, false);
-    if (UAnimInstance* ActionInstance = GetMesh()->GetAnimInstance())
+    UAnimInstance* ActionInstance = GetMesh()->GetAnimInstance();
+    UAnimMontage* DynamicMontage = ActionInstance
+        ? ActionInstance->PlaySlotAnimationAsDynamicMontage(
+            Animation, CombatAnimationSlot, CombatBlendInTime, CombatBlendOutTime, 1.f, 1)
+        : nullptr;
+    if (!DynamicMontage)
+    {
+        UE_LOG(LogCVADAbilityInput, Error,
+            TEXT("Could not play %s through slot %s. Check the active AnimBP contains the slot node."),
+            *GetNameSafe(Animation), *CombatAnimationSlot.ToString());
+        bActionAnimationPlaying = false;
+        if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+            ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
+        bPendingAttackDamage = false;
+        bCombatInputLocked = false;
+        return;
+    }
+    if (ActionInstance)
     {
         // Attacks animate the body but CharacterMovement remains authoritative, allowing move/jump during attacks.
         ActionInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
     }
-    const float Duration = FMath::Max(0.05f, Animation->GetPlayLength());
+    const float Duration = FMath::Max(0.05f, DynamicMontage->GetPlayLength());
     if (HasAuthority() && bPendingAttackDamage)
     {
         GetWorldTimerManager().ClearTimer(AttackDamageTimer);
@@ -394,7 +414,8 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
     }
     // Notify is authoritative for sequencing. This delayed timer is only a safety fallback.
     GetWorldTimerManager().SetTimer(ActionAnimationTimer, this, &ThisClass::HandleActionAnimationFinished, Duration + 0.15f, false);
-    UE_LOG(LogCVADAbilityInput, Log, TEXT("Playing replicated action animation %s Duration=%.2f"), *GetNameSafe(Animation), Duration);
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("Playing replicated action montage %s Slot=%s Duration=%.2f"),
+        *GetNameSafe(Animation), *CombatAnimationSlot.ToString(), Duration);
 }
 
 void ACVADCharacter::HandleActionAnimationFinished()

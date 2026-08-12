@@ -113,4 +113,7 @@ protected:
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Flying Sword") TSubclassOf<UAnimInstance> FlyingSwordAnimClass;
     UPROPERTY(Transient) TSubclassOf<UAnimInstance> NormalAnimClass;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat") FName CombatAnimationSlot = TEXT("UpperBody");
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat", meta=(ClampMin="0.0")) float CombatBlendInTime = 0.08f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat", meta=(ClampMin="0.0")) float CombatBlendOutTime = 0.12f;
 };
