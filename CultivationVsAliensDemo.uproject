@@ -1,0 +1,24 @@
+{
+  "FileVersion": 3,
+  "EngineAssociation": "5.4",
+  "Category": "Games",
+  "Description": "A one-to-two player cultivation action demo built with GAS and Listen Server networking.",
+  "Modules": [
+    {
+      "Name": "CultivationVsAliensDemo",
+      "Type": "Runtime",
+      "LoadingPhase": "Default"
+    },
+    {
+      "Name": "CultivationVsAliensDemoEditor",
+      "Type": "Editor",
+      "LoadingPhase": "Default"
+    }
+  ],
+  "Plugins": [
+    { "Name": "GameplayAbilities", "Enabled": true },
+    { "Name": "EnhancedInput", "Enabled": true },
+    { "Name": "PythonScriptPlugin", "Enabled": true },
+    { "Name": "EditorScriptingUtilities", "Enabled": true }
+  ]
+}
