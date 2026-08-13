@@ -41,6 +41,15 @@ void UCVADUserWidget::NativeConstruct()
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Cancel")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_CancelName")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_ConfirmName")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleConfirmNameClicked);
+    #define BIND_OUTFIT(Name,Fn) if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT(Name)))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::Fn)
+    BIND_OUTFIT("Button_HeadPrev",OutfitHeadPrev);BIND_OUTFIT("Button_HeadNext",OutfitHeadNext);BIND_OUTFIT("Button_HairPrev",OutfitHairPrev);BIND_OUTFIT("Button_HairNext",OutfitHairNext);
+    BIND_OUTFIT("Button_HatPrev",OutfitHatPrev);BIND_OUTFIT("Button_HatNext",OutfitHatNext);BIND_OUTFIT("Button_UpperPrev",OutfitUpperPrev);BIND_OUTFIT("Button_UpperNext",OutfitUpperNext);
+    BIND_OUTFIT("Button_HandsPrev",OutfitHandsPrev);BIND_OUTFIT("Button_HandsNext",OutfitHandsNext);BIND_OUTFIT("Button_LowerPrev",OutfitLowerPrev);BIND_OUTFIT("Button_LowerNext",OutfitLowerNext);
+    BIND_OUTFIT("Button_FeetPrev",OutfitFeetPrev);BIND_OUTFIT("Button_FeetNext",OutfitFeetNext);
+    #undef BIND_OUTFIT
+    if (UButton* Button=Cast<UButton>(GetWidgetFromName(TEXT("Button_OutfitConfirm")))) Button->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleOutfitConfirm);
+    if(GetClass()->GetName().Contains(TEXT("WBP_OutfitSelect")))
+    { for(int32 I=0;I<7;++I)if(GConfig)GConfig->GetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),I),PreviewOutfitParts[I],GGameUserSettingsIni); RefreshOutfitPreview(); }
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot0")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot0);
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot1);
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot2")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot2);
@@ -171,7 +180,7 @@ void UCVADUserWidget::HandlePauseReturnMenuClicked()
 {
     if (ACVADPlayerController* PC = Cast<ACVADPlayerController>(GetOwningPlayer())) PC->RequestReturnToMainMenu();
 }
-void UCVADUserWidget::HandleOpenInventoryClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowInventoryScreen(); }
+void UCVADUserWidget::HandleOpenInventoryClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
 void UCVADUserWidget::HandleOpenSkillTreeClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
 void UCVADUserWidget::HandleOpenSettingsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSettingsScreen(); }
 void UCVADUserWidget::HandleCloseClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->CloseTopScreen(); else CloseScreen(); }
@@ -184,6 +193,25 @@ void UCVADUserWidget::HandleConfirmNameClicked()
     if(!ValidatePlayerName(Name,Failure)){if(Error) Error->SetText(Failure);return;}
     SubmitPlayerName(Name);
     if(ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) { PC->CloseTopScreen(); PC->ContinuePendingMenuAction(); }
+}
+
+void UCVADUserWidget::ChangeOutfitPart(int32 P,int32 D){static const int32 Counts[]={3,4,6,5,3,3,7};PreviewOutfitParts[P]=(PreviewOutfitParts[P]+D+Counts[P])%Counts[P];RefreshOutfitPreview();}
+#define OUTFIT_PAIR(N,I) void UCVADUserWidget::Outfit##N##Prev(){ChangeOutfitPart(I,-1);} void UCVADUserWidget::Outfit##N##Next(){ChangeOutfitPart(I,1);}
+OUTFIT_PAIR(Head,0) OUTFIT_PAIR(Hair,1) OUTFIT_PAIR(Hat,2) OUTFIT_PAIR(Upper,3) OUTFIT_PAIR(Hands,4) OUTFIT_PAIR(Lower,5) OUTFIT_PAIR(Feet,6)
+#undef OUTFIT_PAIR
+void UCVADUserWidget::RefreshOutfitPreview()
+{
+    static const TCHAR* Names[]={TEXT("Text_HeadValue"),TEXT("Text_HairValue"),TEXT("Text_HatValue"),TEXT("Text_UpperValue"),TEXT("Text_HandsValue"),TEXT("Text_LowerValue"),TEXT("Text_FeetValue")};
+    static const TCHAR* Labels[]={TEXT("脸型"),TEXT("发型"),TEXT("帽子"),TEXT("上装"),TEXT("手部"),TEXT("下装"),TEXT("鞋子")}; static const int32 Counts[]={3,4,6,5,3,3,7};
+    for(int32 I=0;I<7;++I)if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(Names[I])))T->SetText(FText::FromString(FString::Printf(TEXT("%s %d/%d"),Labels[I],PreviewOutfitParts[I]+1,Counts[I])));
+}
+void UCVADUserWidget::HandleOutfitConfirm()
+{
+    UEditableTextBox* NameInput=Cast<UEditableTextBox>(GetWidgetFromName(TEXT("Input_PlayerName")));FText Failure;
+    if(NameInput&&!ValidatePlayerName(NameInput->GetText().ToString(),Failure)){if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_OutfitStatus"))))T->SetText(Failure);return;}
+    if(NameInput)SubmitPlayerName(NameInput->GetText().ToString());
+    if(GConfig){for(int32 I=0;I<7;++I)GConfig->SetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),I),PreviewOutfitParts[I],GGameUserSettingsIni);GConfig->Flush(false,GGameUserSettingsIni);}
+    if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_OutfitStatus")))) T->SetText(NSLOCTEXT("CVAD","OutfitSaved","已确认，进入游戏后生效"));
 }
 
 void UCVADUserWidget::InitializeFromOwningPlayer()
@@ -303,6 +331,14 @@ void UCVADUserWidget::EquipSelectedSkill()
     const FCVADSkillRow* Row=Table?Table->FindRow<FCVADSkillRow>(SelectedSkillRow,TEXT("EquipSelectedUI")):nullptr;
     if(!Row || (!Row->bUnlockedByDefault && !CachedPlayerState->IsSkillUnlocked(SelectedSkillRow))) return;
     CachedPlayerState->EquipSkill(Row->SkillSlot,SelectedSkillRow);
+    if(GConfig)
+    {
+        const FString Key=FString::Printf(TEXT("EquippedSkill%d"),static_cast<int32>(Row->SkillSlot));
+        GConfig->SetString(TEXT("CVAD.SkillLoadout"),*Key,*SelectedSkillRow.ToString(),GGameUserSettingsIni);
+        GConfig->Flush(false,GGameUserSettingsIni);
+    }
+    if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillCost"))))
+        T->SetText(NSLOCTEXT("CVAD","SkillEquippedSaved","已装配并保存，下次进入战斗自动生效"));
     UE_LOG(LogTemp,Log,TEXT("Skill tree equip requested %s Slot=%d"),*SelectedSkillRow.ToString(),static_cast<int32>(Row->SkillSlot));
 }
 

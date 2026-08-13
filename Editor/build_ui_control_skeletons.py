@@ -1,6 +1,6 @@
 import unreal
 
-for widget_name in ('WBP_SkillTree', 'WBP_SaveSlots'):
+for widget_name in ('WBP_SkillTree', 'WBP_SaveSlots', 'WBP_OutfitSelect'):
     if not unreal.load_asset('/Game/CVAD/UI/' + widget_name):
         factory = unreal.WidgetBlueprintFactory()
         factory.set_editor_property('parent_class', unreal.load_class(None, '/Script/CultivationVsAliensDemo.CVADUserWidget'))

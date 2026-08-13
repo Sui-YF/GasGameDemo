@@ -30,5 +30,15 @@ private:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> BossNameText;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> ResultStateText;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> DownedHintText;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> PlayerNameText;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> HealthValueText;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> StaminaValueText;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SpiritValueText;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> StanceText;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot1Text;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot2Text;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot3Text;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot4Text;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot5Text;
     TWeakObjectPtr<ACVADBattleDirector> BattleDirector;
 };

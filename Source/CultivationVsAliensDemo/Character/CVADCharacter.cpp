@@ -23,6 +23,7 @@
 #include "EngineUtils.h"
 #include "AbilitySystem/Effects/CVADDamageEffect.h"
 #include "GameplayTagsManager.h"
+#include "Misc/ConfigCacheIni.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCVADAbilityInput, Log, All);
 
@@ -56,10 +57,17 @@ ACVADCharacter::ACVADCharacter()
     LowerBodyMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("EquipmentLowerBody"));
     FeetMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("EquipmentFeet"));
     HandsMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("EquipmentHands"));
-    for (USkeletalMeshComponent* Component : {HeadMesh, UpperBodyMesh, LowerBodyMesh, FeetMesh, HandsMesh})
+    HairMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("EquipmentHair"));
+    HatMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("EquipmentHat"));
+    for (USkeletalMeshComponent* Component : {HeadMesh, HairMesh, HatMesh, UpperBodyMesh, HandsMesh, LowerBodyMesh, FeetMesh})
     {
         Component->SetupAttachment(GetMesh());
         Component->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+        // The demo uses LanFang's authored combined body. Modular equipment was visually
+        // redundant and could remain in reference pose while locomotion AnimBPs changed.
+        Component->SetHiddenInGame(true);
+        Component->SetVisibility(false, true);
+        Component->SetComponentTickEnabled(false);
     }
 
     SwordMesh = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Sword"));
@@ -105,6 +113,23 @@ void ACVADCharacter::BeginPlay()
 {
     Super::BeginPlay();
     NormalAnimClass = GetMesh() ? GetMesh()->GetAnimClass() : nullptr;
+    static const TArray<TArray<FString>> Choices={
+        {TEXT("Heads/SK_Head_A"),TEXT("Heads/SK_Head_B"),TEXT("Heads/SK_Head_C")},
+        {TEXT("Hairs/SK_Hair_A"),TEXT("Hairs/SK_Hair_ADyeing_01"),TEXT("Hairs/SK_Hair_ADyeing_02"),TEXT("Hairs/SK_Hair4MaskCloth_A")},
+        {TEXT(""),TEXT("Hats/SK_BambooHat_A"),TEXT("Hats/SK_BambooHat_B"),TEXT("Hats/SK_BambooHat_C"),TEXT("Hats/SK_Helmet_A"),TEXT("Hats/SK_Helmet_B")},
+        {TEXT("TopBodies/SK_TopBody_A"),TEXT("TopBodies/SK_TopBody_B"),TEXT("TopBodies/SK_TopBody_Base"),TEXT("TopBodies/SK_TopBody_C"),TEXT("TopBodies/SK_TopBody_D")},
+        {TEXT("Hands/SK_Hands"),TEXT("Hands/SK_Hand_L"),TEXT("Hands/SK_Hand_R")},
+        {TEXT("BotBodies/SK_BotBody_A"),TEXT("BotBodies/SK_BotBody_B"),TEXT("BotBodies/SK_BotBody_Base")},
+        {TEXT("Shoes/SK_Boots_A"),TEXT("Shoes/SK_Boots_B"),TEXT("Shoes/SK_Feet"),TEXT("Shoes/SK_Shoes_A"),TEXT("Shoes/SK_Shoes_B"),TEXT("Shoes/SK_Shoes_C"),TEXT("Shoes/SK_Shoes_D")}};
+    USkeletalMeshComponent* Parts[]={HeadMesh,HairMesh,HatMesh,UpperBodyMesh,HandsMesh,LowerBodyMesh,FeetMesh};
+    for(int32 Part=0;Part<7;++Part)
+    {
+        int32 Index=0;if(GConfig)GConfig->GetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),Part),Index,GGameUserSettingsIni);
+        Index=FMath::Clamp(Index,0,Choices[Part].Num()-1); const FString& Relative=Choices[Part][Index];
+        USkeletalMesh* PartMesh=nullptr;if(!Relative.IsEmpty()){const FString Asset=FString::Printf(TEXT("/Game/LanFang/Meshes/Characters/Separates/%s.%s"),*Relative,*FPaths::GetBaseFilename(Relative));PartMesh=LoadObject<USkeletalMesh>(nullptr,*Asset);}
+        Parts[Part]->SetSkeletalMesh(PartMesh);Parts[Part]->SetLeaderPoseComponent(GetMesh());Parts[Part]->SetHiddenInGame(false);Parts[Part]->SetVisibility(true,true);Parts[Part]->SetComponentTickEnabled(false);
+    }
+    GetMesh()->SetVisibility(false,false);
 }
 
 UAbilitySystemComponent* ACVADCharacter::GetAbilitySystemComponent() const
@@ -118,7 +143,7 @@ void ACVADCharacter::PossessedBy(AController* NewController)
     Super::PossessedBy(NewController);
     InitializeAbilityActorInfo();
     GrantDefaultAbilities();
-    BindEquipment();
+    // Outfit swapping is intentionally disabled for this demo.
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->GetGameplayAttributeValueChangeDelegate(UCVADAttributeSet::GetHealthAttribute()).AddUObject(this, &ThisClass::HandlePlayerHealthChanged);
 }
@@ -634,31 +659,22 @@ void ACVADCharacter::OnRep_PlayerState()
 {
     Super::OnRep_PlayerState();
     InitializeAbilityActorInfo();
-    BindEquipment();
 }
 
 void ACVADCharacter::BindEquipment()
 {
-    ACVADPlayerState* CVADPlayerState = GetPlayerState<ACVADPlayerState>();
-    UCVADInventoryComponent* Inventory = CVADPlayerState ? CVADPlayerState->GetInventoryComponent() : nullptr;
-    if (!Inventory) return;
-
-    Inventory->OnEquipmentChanged.RemoveDynamic(this, &ThisClass::HandleEquipmentChanged);
-    Inventory->OnEquipmentChanged.AddDynamic(this, &ThisClass::HandleEquipmentChanged);
-    HandleEquipmentChanged(Inventory->GetEquipmentLoadout());
+    // Kept as a no-op for save compatibility with profiles created before equipment removal.
 }
 
 void ACVADCharacter::HandleEquipmentChanged(const FCVADEquipmentLoadout& NewLoadout)
 {
     for (USkeletalMeshComponent* Component : {HeadMesh, UpperBodyMesh, LowerBodyMesh, FeetMesh, HandsMesh})
     {
-        Component->SetLeaderPoseComponent(GetMesh());
+        if (!Component) continue;
+        Component->SetSkeletalMesh(nullptr);
+        Component->SetHiddenInGame(true);
+        Component->SetVisibility(false, true);
     }
-    SetEquipmentMesh(HeadMesh, NewLoadout.Head);
-    SetEquipmentMesh(UpperBodyMesh, NewLoadout.UpperBody);
-    SetEquipmentMesh(LowerBodyMesh, NewLoadout.LowerBody);
-    SetEquipmentMesh(FeetMesh, NewLoadout.Feet);
-    SetEquipmentMesh(HandsMesh, NewLoadout.Hands);
 }
 
 void ACVADCharacter::SetEquipmentMesh(USkeletalMeshComponent* Component, FName ItemId)

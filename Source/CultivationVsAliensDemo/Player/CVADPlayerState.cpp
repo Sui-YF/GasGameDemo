@@ -9,6 +9,7 @@
 #include "Net/UnrealNetwork.h"
 #include "TimerManager.h"
 #include "Character/CVADCharacter.h"
+#include "Misc/ConfigCacheIni.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCVADSkills, Log, All);
 
@@ -154,8 +155,15 @@ void ACVADPlayerState::InitializeDefaultSkillLoadout()
     static const FName Defaults[] = {TEXT("SwordNormalCombo"), TEXT("SwordAttack1"), TEXT("DodgeRoll"), TEXT("FlyingSword1"), TEXT("FlyingSwordStance")};
     for (int32 Index = 0; Index < UE_ARRAY_COUNT(Defaults); ++Index)
     {
-        if (EquippedSkillRows.IsValidIndex(Index) && EquippedSkillRows[Index].IsNone())
-            EquipSkillAuthority(static_cast<ECVADAbilityInput>(Index), Defaults[Index]);
+        if (!EquippedSkillRows.IsValidIndex(Index) || !EquippedSkillRows[Index].IsNone()) continue;
+        FName Desired=Defaults[Index];
+        if(GConfig)
+        {
+            FString Saved; const FString Key=FString::Printf(TEXT("EquippedSkill%d"),Index);
+            if(GConfig->GetString(TEXT("CVAD.SkillLoadout"),*Key,Saved,GGameUserSettingsIni)&&!Saved.IsEmpty()) Desired=FName(*Saved);
+        }
+        if(!EquipSkillAuthority(static_cast<ECVADAbilityInput>(Index),Desired))
+            EquipSkillAuthority(static_cast<ECVADAbilityInput>(Index),Defaults[Index]);
     }
 }
 
@@ -220,6 +228,7 @@ void ACVADPlayerState::RestoreProfileAuthority(int32 InLevel, int32 InExperience
     AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetSpiritAttribute(), MaxSpirit);
     for (int32 Index = 0; Index < FMath::Min(InEquippedSkills.Num(), EquippedSkillRows.Num()); ++Index)
         EquipSkillAuthority(static_cast<ECVADAbilityInput>(Index), InEquippedSkills[Index]);
+    InitializeDefaultSkillLoadout();
     if (InventoryComponent) InventoryComponent->RestoreInventory(InUnlockedItems, InEquipment);
     ForceNetUpdate(); OnSkillLoadoutChanged.Broadcast();
     UE_LOG(LogCVADSkills, Log, TEXT("Restored profile Level=%d XP=%d Skills=%d Items=%d"), PlayerLevel, Experience, UnlockedSkillRows.Num(), InUnlockedItems.Num());

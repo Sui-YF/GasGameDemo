@@ -107,10 +107,29 @@ void ACVADEnemyCharacter::BeginPlay()
 {
     Super::BeginPlay();
     bIsBoss = bIsBoss || BalanceRowName == TEXT("Boss");
-    AngelWingLeft->SetVisibility(bIsBoss,true); AngelWingRight->SetVisibility(bIsBoss,true);
-    AngelSword->SetVisibility(false,true);
-    GetMesh()->SetCullDistance(VisualCullDistance);
+    if(AngelWingLeft) AngelWingLeft->SetVisibility(bIsBoss,true);
+    if(AngelWingRight) AngelWingRight->SetVisibility(bIsBoss,true);
+    if(AngelSword) AngelSword->SetVisibility(false,true);
+    if(GetMesh()) GetMesh()->SetCullDistance(VisualCullDistance);
     NetCullDistanceSquared = FMath::Square(NetworkCullDistance);
+    if(!AbilitySystemComponent)
+    {
+        UE_LOG(LogTemp,Error,TEXT("Enemy %s has no AbilitySystemComponent; destroying invalid spawn"),*GetName());
+        if(HasAuthority()) Destroy();
+        return;
+    }
+    // Blueprint children created before AttributeSet became a reflected subobject can
+    // deserialize the property as null. Recover it from the ASC, or register a fresh set.
+    if(!AttributeSet)
+    {
+        AttributeSet=const_cast<UCVADAttributeSet*>(AbilitySystemComponent->GetSet<UCVADAttributeSet>());
+        if(!AttributeSet)
+        {
+            AttributeSet=NewObject<UCVADAttributeSet>(this,TEXT("RuntimeAttributeSet"));
+            AbilitySystemComponent->AddAttributeSetSubobject(AttributeSet.Get());
+        }
+        UE_LOG(LogTemp,Warning,TEXT("Enemy %s recovered missing AttributeSet from legacy Blueprint"),*GetName());
+    }
     AbilitySystemComponent->InitAbilityActorInfo(this, this);
     AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UCVADAttributeSet::GetHealthAttribute())
         .AddUObject(this, &ThisClass::HandleHealthChanged);

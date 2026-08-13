@@ -31,6 +31,9 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_LoadGame;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Quit;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Settings;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_ChangeName;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Skills;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Outfit;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Ready;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_StartGame;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_LeaveLobby;
@@ -40,6 +43,7 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_ReturnMainMenu;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UEditableTextBox> Input_ServerAddress;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_Status;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_PlayerName;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_ResultTitle;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_ClearTime;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> Text_Defeats;
@@ -53,6 +57,9 @@ private:
     UFUNCTION() void HandleLoadClicked();
     UFUNCTION() void HandleQuitClicked();
     UFUNCTION() void HandleSettingsClicked();
+    UFUNCTION() void HandleChangeNameClicked();
+    UFUNCTION() void HandleSkillsClicked();
+    UFUNCTION() void HandleOutfitClicked();
     UFUNCTION() void HandleReadyClicked();
     UFUNCTION() void HandleStartGameClicked();
     UFUNCTION() void HandleLeaveLobbyClicked();

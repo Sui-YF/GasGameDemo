@@ -26,6 +26,9 @@ void UCVADMenuWidget::NativeConstruct()
     if (Button_LoadGame) Button_LoadGame->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLoadClicked);
     if (Button_Quit) Button_Quit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleQuitClicked);
     if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
+    if (Button_ChangeName) Button_ChangeName->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleChangeNameClicked);
+    if (Button_Skills) Button_Skills->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSkillsClicked);
+    if (Button_Outfit) Button_Outfit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOutfitClicked);
     if (Button_Ready) Button_Ready->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleReadyClicked);
     if (Button_StartGame) Button_StartGame->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleStartGameClicked);
     if (Button_LeaveLobby) Button_LeaveLobby->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleLeaveLobbyClicked);
@@ -51,6 +54,8 @@ void UCVADMenuWidget::NativeConstruct()
         if(GConfig->GetString(TEXT("CVAD.Network"),TEXT("LastError"),LastError,GGameUserSettingsIni)&&!LastError.IsEmpty())
         {Text_Status->SetText(FText::FromString(LastError));GConfig->RemoveKey(TEXT("CVAD.Network"),TEXT("LastError"),GGameUserSettingsIni);GConfig->Flush(false,GGameUserSettingsIni);}
     }
+    if (Text_PlayerName)
+        Text_PlayerName->SetText(FText::FromString(FString::Printf(TEXT("玩家：%s"), *GetConfiguredPlayerName())));
 }
 
 void UCVADMenuWidget::NativeTick(const FGeometry& MyGeometry,float InDeltaTime)
@@ -74,6 +79,9 @@ void UCVADMenuWidget::HandleLoadClicked()
 }
 void UCVADMenuWidget::HandleQuitClicked() { QuitGame(); }
 void UCVADMenuWidget::HandleSettingsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSettingsScreen(); }
+void UCVADMenuWidget::HandleChangeNameClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowNameEntryScreen(); }
+void UCVADMenuWidget::HandleSkillsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
+void UCVADMenuWidget::HandleOutfitClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowOutfitScreen(); }
 void UCVADMenuWidget::HandleReadyClicked(){if(ACVADPlayerState* PS=GetOwningPlayerState<ACVADPlayerState>()) PS->SetLobbyReady(!PS->bLobbyReady);}
 void UCVADMenuWidget::HandleStartGameClicked(){if(ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->RequestStartLobbyGame();}
 void UCVADMenuWidget::HandleLeaveLobbyClicked(){UGameplayStatics::OpenLevel(this,TEXT("L_MainMenu"));}

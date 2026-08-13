@@ -43,6 +43,7 @@ public:
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowInventoryScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSaveSlotsScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowNameEntryScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowOutfitScreen();
     void SetPendingMenuAction(int32 Action, const FString& Address = FString());
     void ContinuePendingMenuAction();
     float ConsumeUnsavedPlayTime();
@@ -91,6 +92,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SkillTreeWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SaveSlotsWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> NameEntryWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> OutfitWidgetClass;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> HUDWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> InventoryWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> PauseWidget;

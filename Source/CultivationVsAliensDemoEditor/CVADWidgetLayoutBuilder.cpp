@@ -8,6 +8,7 @@
 #include "Components/ProgressBar.h"
 #include "Components/TextBlock.h"
 #include "Components/VerticalBox.h"
+#include "Components/HorizontalBox.h"
 #include "Components/CheckBox.h"
 #include "Components/ComboBoxString.h"
 #include "Components/EditableTextBox.h"
@@ -247,6 +248,103 @@ namespace
         return true;
     }
 
+    bool BuildMainHUDV2()
+    {
+        UWidgetBlueprint* Blueprint=LoadWidgetBlueprint(TEXT("/Game/CVAD/UI/WBP_HUD.WBP_HUD"));
+        if(!Blueprint||!Blueprint->WidgetTree) return false;
+        UWidgetTree* Tree=Blueprint->WidgetTree; Tree->Modify(); Tree->RootWidget=nullptr;
+        UCanvasPanel* Root=Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("RootCanvas")); Tree->RootWidget=Root;
+        auto Panel=[&](FName Name,FAnchors Anchors,FVector2D Alignment,FVector2D Position,FVector2D Size)
+        {
+            UBorder* B=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),Name); B->SetBrushColor(FLinearColor(0.008f,0.015f,0.035f,0.82f)); B->SetPadding(FMargin(14.f));
+            UCanvasPanelSlot* S=Root->AddChildToCanvas(B); S->SetAnchors(Anchors); S->SetAlignment(Alignment); S->SetPosition(Position); S->SetSize(Size); return B;
+        };
+        auto Text=[&](UPanelWidget* Parent,FName Name,const FString& Value,int32 Size=16)
+        {
+            UTextBlock* T=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),Name); T->bIsVariable=true; T->SetText(FText::FromString(Value)); FSlateFontInfo F=T->GetFont();F.Size=Size;T->SetFont(F);T->SetColorAndOpacity(FSlateColor(FLinearColor::White)); Parent->AddChild(T); return T;
+        };
+        auto Bar=[&](UVerticalBox* Parent,FName Name,FLinearColor Color)
+        {
+            UProgressBar* P=Tree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(),Name);P->bIsVariable=true;P->SetFillColorAndOpacity(Color);Parent->AddChildToVerticalBox(P);return P;
+        };
+
+        UBorder* PlayerPanel=Panel(TEXT("PlayerStatusPanel"),FAnchors(0.f,1.f),FVector2D(0.f,1.f),FVector2D(28.f,-28.f),FVector2D(430.f,255.f));
+        UVerticalBox* Player=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("PlayerStatusStack"));PlayerPanel->AddChild(Player);
+        Text(Player,TEXT("PlayerNameText"),TEXT("兰芳"),24); Text(Player,TEXT("LevelText"),TEXT("等级 1"),16);
+        Text(Player,TEXT("HealthLabel"),TEXT("生命"),14); Bar(Player,TEXT("HealthBar"),FLinearColor(0.85f,0.06f,0.08f)); Text(Player,TEXT("HealthValueText"),TEXT("100 / 100"),13);
+        Text(Player,TEXT("StaminaLabel"),TEXT("体力"),14); Bar(Player,TEXT("StaminaBar"),FLinearColor(0.1f,0.8f,0.25f)); Text(Player,TEXT("StaminaValueText"),TEXT("100 / 100"),13);
+        Text(Player,TEXT("SpiritLabel"),TEXT("灵力"),14); Bar(Player,TEXT("SpiritBar"),FLinearColor(0.05f,0.4f,1.f)); Text(Player,TEXT("SpiritValueText"),TEXT("100 / 100"),13);
+        Text(Player,TEXT("ExperienceText"),TEXT("经验 0/100"),13);Bar(Player,TEXT("ExperienceBar"),FLinearColor(0.8f,0.55f,0.1f));Text(Player,TEXT("SkillPointsText"),TEXT("技能点 0"),13);
+
+        UBorder* ObjectivePanel=Panel(TEXT("ObjectivePanel"),FAnchors(0.5f,0.f),FVector2D(0.5f,0.f),FVector2D(0.f,24.f),FVector2D(700.f,125.f));
+        UVerticalBox* Objective=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("ObjectiveStack"));ObjectivePanel->AddChild(Objective);
+        Text(Objective,TEXT("ObjectiveText"),TEXT("肃清骷髅军团"),23);Text(Objective,TEXT("DefeatText"),TEXT("击破 0/15"),17);Text(Objective,TEXT("BossNameText"),TEXT("天穹三使"),18);Bar(Objective,TEXT("BossHealthBar"),FLinearColor(0.7f,0.08f,0.85f));
+
+        UBorder* SkillPanel=Panel(TEXT("SkillBarPanel"),FAnchors(0.5f,1.f),FVector2D(0.5f,1.f),FVector2D(0.f,-28.f),FVector2D(720.f,105.f));
+        UVerticalBox* SkillOuter=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("SkillOuter"));SkillPanel->AddChild(SkillOuter);Text(SkillOuter,TEXT("StanceText"),TEXT("持剑模式 · 消耗体力"),18);
+        UHorizontalBox* Skills=Tree->ConstructWidget<UHorizontalBox>(UHorizontalBox::StaticClass(),TEXT("SkillSlots"));SkillOuter->AddChildToVerticalBox(Skills);
+        Text(Skills,TEXT("SkillSlot1Text"),TEXT("1  技能"),15);Text(Skills,TEXT("SkillSlot2Text"),TEXT("2  普攻"),15);Text(Skills,TEXT("SkillSlot3Text"),TEXT("3  普攻"),15);Text(Skills,TEXT("SkillSlot4Text"),TEXT("4  普攻"),15);Text(Skills,TEXT("SkillSlot5Text"),TEXT("5  技能"),15);
+
+        UBorder* HintPanel=Panel(TEXT("ShortcutPanel"),FAnchors(1.f,0.5f),FVector2D(1.f,0.5f),FVector2D(-28.f,0.f),FVector2D(270.f,210.f));
+        UVerticalBox* Hints=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("ShortcutStack"));HintPanel->AddChild(Hints);
+        Text(Hints,TEXT("ShortcutTitle"),TEXT("快捷菜单"),20);Text(Hints,TEXT("ShortcutSkill"),TEXT("Tab / B  技能树"));Text(Hints,TEXT("ShortcutSettings"),TEXT("F1  设置"));Text(Hints,TEXT("ShortcutSave"),TEXT("F5  存档"));Text(Hints,TEXT("ShortcutPause"),TEXT("Esc  暂停"));Text(Hints,TEXT("ShortcutRevive"),TEXT("E  救援"));
+        Text(Root,TEXT("DownedHintText"),TEXT(""),26);Text(Root,TEXT("ResultStateText"),TEXT(""),34);
+        SaveWidgetBlueprint(Blueprint); return true;
+    }
+
+    bool BuildMainMenuV2()
+    {
+        UWidgetBlueprint* Blueprint=LoadWidgetBlueprint(TEXT("/Game/CVAD/UI/WBP_MainMenu.WBP_MainMenu"));
+        if(!Blueprint||!Blueprint->WidgetTree) return false;
+        UWidgetTree* Tree=Blueprint->WidgetTree; Tree->Modify(); Tree->RootWidget=nullptr;
+        UCanvasPanel* Root=Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("RootCanvas")); Tree->RootWidget=Root;
+
+        UBorder* Shade=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("BackgroundShade"));
+        Shade->SetBrushColor(FLinearColor(0.003f,0.008f,0.02f,0.72f));
+        UCanvasPanelSlot* ShadeSlot=Root->AddChildToCanvas(Shade); ShadeSlot->SetAnchors(FAnchors(0.f,0.f,1.f,1.f)); ShadeSlot->SetOffsets(FMargin(0.f));
+
+        auto MakeText=[&](UPanelWidget* Parent,FName Name,const FString& Value,int32 Size,FLinearColor Color=FLinearColor::White)
+        {
+            UTextBlock* T=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),Name); T->bIsVariable=true; T->SetText(FText::FromString(Value));
+            FSlateFontInfo Font=T->GetFont(); Font.Size=Size; T->SetFont(Font); T->SetColorAndOpacity(FSlateColor(Color)); Parent->AddChild(T); return T;
+        };
+        auto MakeButton=[&](UVerticalBox* Parent,FName Name,const FString& Label,FLinearColor Color=FLinearColor(0.08f,0.15f,0.28f,0.96f))
+        {
+            UButton* B=Tree->ConstructWidget<UButton>(UButton::StaticClass(),Name); B->bIsVariable=true; B->SetBackgroundColor(Color);
+            UTextBlock* T=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),*(FString(TEXT("Label_"))+Name.ToString())); T->SetText(FText::FromString(Label));
+            FSlateFontInfo Font=T->GetFont(); Font.Size=21; T->SetFont(Font); T->SetJustification(ETextJustify::Center); T->SetColorAndOpacity(FSlateColor(FLinearColor::White));
+            B->AddChild(T); Parent->AddChildToVerticalBox(B); return B;
+        };
+
+        UVerticalBox* Brand=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("BrandStack"));
+        UCanvasPanelSlot* BrandSlot=Root->AddChildToCanvas(Brand); BrandSlot->SetAnchors(FAnchors(0.07f,0.27f)); BrandSlot->SetSize(FVector2D(760.f,330.f));
+        MakeText(Brand,TEXT("Text_Title"),TEXT("修仙大战外星人"),54,FLinearColor(0.85f,0.94f,1.f));
+        MakeText(Brand,TEXT("Text_Subtitle"),TEXT("CULTIVATION  VS  ALIENS"),24,FLinearColor(0.3f,0.72f,1.f));
+        MakeText(Brand,TEXT("Text_Chapter"),TEXT("兰芳 · 天穹三使讨伐战"),26,FLinearColor(0.95f,0.78f,0.34f));
+        MakeText(Brand,TEXT("Text_ModeInfo"),TEXT("单人无双战斗 / 双人 Listen Server 联机"),17,FLinearColor(0.72f,0.76f,0.84f));
+
+        UBorder* MenuPanel=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("MenuPanel")); MenuPanel->SetBrushColor(FLinearColor(0.008f,0.018f,0.045f,0.94f)); MenuPanel->SetPadding(FMargin(28.f));
+        UCanvasPanelSlot* MenuSlot=Root->AddChildToCanvas(MenuPanel); MenuSlot->SetAnchors(FAnchors(0.78f,0.5f)); MenuSlot->SetAlignment(FVector2D(0.5f)); MenuSlot->SetSize(FVector2D(460.f,690.f));
+        UVerticalBox* Menu=Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(),TEXT("MenuStack")); MenuPanel->AddChild(Menu);
+        MakeText(Menu,TEXT("Text_MenuHeader"),TEXT("主菜单"),30,FLinearColor(0.85f,0.94f,1.f));
+        MakeText(Menu,TEXT("Text_PlayerName"),TEXT("玩家：兰芳"),18,FLinearColor(0.95f,0.78f,0.34f));
+        MakeButton(Menu,TEXT("Button_SinglePlayer"),TEXT("开始游戏"),FLinearColor(0.1f,0.38f,0.58f,1.f));
+        MakeButton(Menu,TEXT("Button_LoadGame"),TEXT("继续游戏 / 存档"));
+        MakeButton(Menu,TEXT("Button_Skills"),TEXT("功法 / 技能装配"),FLinearColor(0.19f,0.16f,0.38f,1.f));
+        MakeButton(Menu,TEXT("Button_Outfit"),TEXT("选择装扮"),FLinearColor(0.18f,0.26f,0.34f,1.f));
+        MakeButton(Menu,TEXT("Button_HostListenServer"),TEXT("创建双人房间"));
+        UEditableTextBox* Address=Tree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(),TEXT("Input_ServerAddress")); Address->bIsVariable=true; Address->SetHintText(FText::FromString(TEXT("房主地址，例如 127.0.0.1:7777"))); Menu->AddChildToVerticalBox(Address);
+        MakeButton(Menu,TEXT("Button_JoinGame"),TEXT("加入房间"));
+        MakeButton(Menu,TEXT("Button_ChangeName"),TEXT("修改玩家名称"));
+        MakeButton(Menu,TEXT("Button_Settings"),TEXT("设置 / 自定义按键"));
+        MakeButton(Menu,TEXT("Button_Quit"),TEXT("退出游戏"),FLinearColor(0.24f,0.07f,0.09f,0.96f));
+        MakeText(Menu,TEXT("Text_Status"),TEXT("准备就绪"),15,FLinearColor(0.55f,0.78f,0.9f));
+
+        UTextBlock* Version=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),TEXT("Text_Version")); Version->bIsVariable=true; Version->SetText(FText::FromString(TEXT("DEMO 0.1  |  GAS · 双人联机"))); Version->SetColorAndOpacity(FSlateColor(FLinearColor(0.55f,0.6f,0.7f)));
+        UCanvasPanelSlot* VersionSlot=Root->AddChildToCanvas(Version); VersionSlot->SetAnchors(FAnchors(0.f,1.f)); VersionSlot->SetAlignment(FVector2D(0.f,1.f)); VersionSlot->SetPosition(FVector2D(30.f,-20.f)); VersionSlot->SetSize(FVector2D(500.f,32.f));
+        SaveWidgetBlueprint(Blueprint); return true;
+    }
+
     bool BuildInventory()
     {
         UWidgetBlueprint* Blueprint = LoadWidgetBlueprint(TEXT("/Game/CVAD/UI/WBP_Inventory.WBP_Inventory"));
@@ -358,16 +456,33 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
 {
     struct FPage { const TCHAR* Asset; TArray<FString> Buttons, Texts, Sliders, Checks, Combos, Inputs; };
     const TArray<FPage> Pages = {
-        {TEXT("WBP_MainMenu"), {TEXT("Button_SinglePlayer"),TEXT("Button_HostListenServer"),TEXT("Button_JoinGame"),TEXT("Button_LoadGame"),TEXT("Button_Settings"),TEXT("Button_Quit")}, {TEXT("Text_Title"),TEXT("Text_Version"),TEXT("Text_Status")}},
         {TEXT("WBP_Lobby"), {TEXT("Button_Ready"),TEXT("Button_StartGame"),TEXT("Button_LeaveLobby"),TEXT("Button_CopyAddress")}, {TEXT("Text_LobbyTitle"),TEXT("Text_HostName"),TEXT("Text_Player1"),TEXT("Text_Player2"),TEXT("Text_ConnectionStatus")}, {}, {}, {}, {TEXT("Input_ServerAddress")}},
-        {TEXT("WBP_Pause"), {TEXT("Button_Resume"),TEXT("Button_Inventory"),TEXT("Button_SkillTree"),TEXT("Button_Settings"),TEXT("Button_SaveGame"),TEXT("Button_LoadGame"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_PauseTitle")}},
-        {TEXT("WBP_Settings"), {TEXT("Button_RebindMoveForward"),TEXT("Button_RebindMoveBack"),TEXT("Button_RebindMoveLeft"),TEXT("Button_RebindMoveRight"),TEXT("Button_RebindJump"),TEXT("Button_RebindLightAttack"),TEXT("Button_RebindHeavyAttack"),TEXT("Button_RebindDodge"),TEXT("Button_RebindFlyingSword"),TEXT("Button_RebindSwitchStance"),TEXT("Button_ResetBindings"),TEXT("Button_Apply"),TEXT("Button_Cancel")}, {TEXT("Text_SettingsTitle"),TEXT("Text_RebindPrompt"),TEXT("Text_NameError")}, {TEXT("Slider_MasterVolume"),TEXT("Slider_MusicVolume"),TEXT("Slider_SFXVolume"),TEXT("Slider_MouseSensitivity"),TEXT("Slider_ResolutionScale")}, {TEXT("Check_Fullscreen"),TEXT("Check_VSync"),TEXT("Check_MouseFacing")}, {TEXT("Combo_Resolution"),TEXT("Combo_Quality"),TEXT("Combo_Language")}, {TEXT("Input_PlayerName")}},
+        {TEXT("WBP_Pause"), {TEXT("Button_Resume"),TEXT("Button_Settings"),TEXT("Button_SaveGame"),TEXT("Button_LoadGame"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_PauseTitle")}},
+        {TEXT("WBP_Settings"), {TEXT("Button_RebindMoveForward"),TEXT("Button_RebindMoveBack"),TEXT("Button_RebindMoveLeft"),TEXT("Button_RebindMoveRight"),TEXT("Button_RebindJump"),TEXT("Button_RebindLightAttack"),TEXT("Button_RebindHeavyAttack"),TEXT("Button_RebindDodge"),TEXT("Button_RebindFlyingSword"),TEXT("Button_RebindSwitchStance"),TEXT("Button_ResetBindings"),TEXT("Button_Apply"),TEXT("Button_Cancel")}, {TEXT("Text_SettingsTitle"),TEXT("Text_RebindPrompt"),TEXT("Text_NameError")}, {TEXT("Slider_MasterVolume"),TEXT("Slider_MouseSensitivity"),TEXT("Slider_ResolutionScale")}, {TEXT("Check_Fullscreen"),TEXT("Check_VSync"),TEXT("Check_MouseFacing")}, {TEXT("Combo_Quality")}, {TEXT("Input_PlayerName")}},
         {TEXT("WBP_Result"), {TEXT("Button_Retry"),TEXT("Button_ReturnLobby"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_ResultTitle"),TEXT("Text_ClearTime"),TEXT("Text_Defeats"),TEXT("Text_BossResult"),TEXT("Text_ExperienceEarned")}},
         {TEXT("WBP_NameEntry"), {TEXT("Button_ConfirmName"),TEXT("Button_CancelName")}, {TEXT("Text_NameTitle"),TEXT("Text_NameError")}, {}, {}, {}, {TEXT("Input_PlayerName")}},
+        {TEXT("WBP_OutfitSelect"), {TEXT("Button_HeadPrev"),TEXT("Button_HeadNext"),TEXT("Button_HairPrev"),TEXT("Button_HairNext"),TEXT("Button_HatPrev"),TEXT("Button_HatNext"),TEXT("Button_UpperPrev"),TEXT("Button_UpperNext"),TEXT("Button_HandsPrev"),TEXT("Button_HandsNext"),TEXT("Button_LowerPrev"),TEXT("Button_LowerNext"),TEXT("Button_FeetPrev"),TEXT("Button_FeetNext"),TEXT("Button_OutfitConfirm"),TEXT("Button_Close")}, {TEXT("Text_OutfitTitle"),TEXT("Text_HeadValue"),TEXT("Text_HairValue"),TEXT("Text_HatValue"),TEXT("Text_UpperValue"),TEXT("Text_HandsValue"),TEXT("Text_LowerValue"),TEXT("Text_FeetValue"),TEXT("Text_OutfitStatus")}, {}, {}, {}, {TEXT("Input_PlayerName")}},
         {TEXT("WBP_SaveSlots"), {TEXT("Button_SaveSlot0"),TEXT("Button_LoadSlot0"),TEXT("Button_DeleteSlot0"),TEXT("Button_SaveSlot1"),TEXT("Button_LoadSlot1"),TEXT("Button_DeleteSlot1"),TEXT("Button_SaveSlot2"),TEXT("Button_LoadSlot2"),TEXT("Button_DeleteSlot2"),TEXT("Button_Close")}, {TEXT("Text_SaveTitle"),TEXT("Text_Slot0"),TEXT("Text_Slot1"),TEXT("Text_Slot2")}},
-        {TEXT("WBP_SkillTree"), {TEXT("Button_SwordAttack1"),TEXT("Button_SwordAttack2"),TEXT("Button_SwordAttack3"),TEXT("Button_SwordAttack4"),TEXT("Button_SwordAttack5"),TEXT("Button_FlyingSword1"),TEXT("Button_FlyingSword2"),TEXT("Button_FlyingSword3"),TEXT("Button_EquipSelected"),TEXT("Button_ResetSkills"),TEXT("Button_Close")}, {TEXT("Text_SkillTreeTitle"),TEXT("Text_Level"),TEXT("Text_Experience"),TEXT("Text_SkillPoints"),TEXT("Text_SelectedSkillName"),TEXT("Text_SelectedSkillDescription"),TEXT("Text_Prerequisite"),TEXT("Text_SkillCost")}},
+        {TEXT("WBP_SkillTree"), {TEXT("Button_SwordAttack1"),TEXT("Button_SwordAttack2"),TEXT("Button_SwordAttack3"),TEXT("Button_SwordAttack4"),TEXT("Button_SwordAttack5"),TEXT("Button_FlyingSword1"),TEXT("Button_FlyingSword2"),TEXT("Button_FlyingSword3"),TEXT("Button_EquipSelected"),TEXT("Button_Close")}, {TEXT("Text_SkillTreeTitle"),TEXT("Text_Level"),TEXT("Text_Experience"),TEXT("Text_SkillPoints"),TEXT("Text_SelectedSkillName"),TEXT("Text_SelectedSkillDescription"),TEXT("Text_Prerequisite"),TEXT("Text_SkillCost")}},
     };
     bool bAllSucceeded = true;
+    const TMap<FString,FString> ButtonLabels={
+        {TEXT("Button_SinglePlayer"),TEXT("开始游戏")},{TEXT("Button_HostListenServer"),TEXT("创建房间")},{TEXT("Button_JoinGame"),TEXT("加入房间")},{TEXT("Button_LoadGame"),TEXT("读取存档")},{TEXT("Button_Settings"),TEXT("游戏设置")},{TEXT("Button_Quit"),TEXT("退出游戏")},
+        {TEXT("Button_Ready"),TEXT("准备 / 取消准备")},{TEXT("Button_StartGame"),TEXT("开始战斗")},{TEXT("Button_LeaveLobby"),TEXT("离开房间")},{TEXT("Button_CopyAddress"),TEXT("复制主机地址")},
+        {TEXT("Button_Resume"),TEXT("继续游戏")},{TEXT("Button_Inventory"),TEXT("技能装配")},{TEXT("Button_SkillTree"),TEXT("技能树")},{TEXT("Button_SaveGame"),TEXT("保存游戏")},{TEXT("Button_ReturnMainMenu"),TEXT("返回主菜单")},
+        {TEXT("Button_RebindMoveForward"),TEXT("前进按键")},{TEXT("Button_RebindMoveBack"),TEXT("后退按键")},{TEXT("Button_RebindMoveLeft"),TEXT("左移按键")},{TEXT("Button_RebindMoveRight"),TEXT("右移按键")},{TEXT("Button_RebindJump"),TEXT("跳跃按键")},
+        {TEXT("Button_RebindLightAttack"),TEXT("普通攻击按键")},{TEXT("Button_RebindHeavyAttack"),TEXT("重攻击按键")},{TEXT("Button_RebindDodge"),TEXT("闪避按键")},{TEXT("Button_RebindFlyingSword"),TEXT("飞剑技能按键")},{TEXT("Button_RebindSwitchStance"),TEXT("切换模式按键")},{TEXT("Button_ResetBindings"),TEXT("恢复默认按键")},{TEXT("Button_Apply"),TEXT("应用设置")},{TEXT("Button_Cancel"),TEXT("取消")},
+        {TEXT("Button_Retry"),TEXT("重新挑战")},{TEXT("Button_ReturnLobby"),TEXT("返回大厅")},
+        {TEXT("Button_ConfirmName"),TEXT("确认名称")},{TEXT("Button_CancelName"),TEXT("取消")},
+        {TEXT("Button_OutfitPrevious"),TEXT("← 上一套")},{TEXT("Button_OutfitNext"),TEXT("下一套 →")},{TEXT("Button_OutfitConfirm"),TEXT("确认使用")},
+        {TEXT("Button_HeadPrev"),TEXT("← 脸型")},{TEXT("Button_HeadNext"),TEXT("脸型 →")},{TEXT("Button_HairPrev"),TEXT("← 发型")},{TEXT("Button_HairNext"),TEXT("发型 →")},
+        {TEXT("Button_HatPrev"),TEXT("← 帽子")},{TEXT("Button_HatNext"),TEXT("帽子 →")},{TEXT("Button_UpperPrev"),TEXT("← 上装")},{TEXT("Button_UpperNext"),TEXT("上装 →")},
+        {TEXT("Button_HandsPrev"),TEXT("← 手部")},{TEXT("Button_HandsNext"),TEXT("手部 →")},{TEXT("Button_LowerPrev"),TEXT("← 下装")},{TEXT("Button_LowerNext"),TEXT("下装 →")},
+        {TEXT("Button_FeetPrev"),TEXT("← 鞋子")},{TEXT("Button_FeetNext"),TEXT("鞋子 →")},
+        {TEXT("Button_SaveSlot0"),TEXT("保存到槽位 1")},{TEXT("Button_LoadSlot0"),TEXT("读取槽位 1")},{TEXT("Button_DeleteSlot0"),TEXT("删除槽位 1")},{TEXT("Button_SaveSlot1"),TEXT("保存到槽位 2")},{TEXT("Button_LoadSlot1"),TEXT("读取槽位 2")},{TEXT("Button_DeleteSlot1"),TEXT("删除槽位 2")},{TEXT("Button_SaveSlot2"),TEXT("保存到槽位 3")},{TEXT("Button_LoadSlot2"),TEXT("读取槽位 3")},{TEXT("Button_DeleteSlot2"),TEXT("删除槽位 3")},{TEXT("Button_Close"),TEXT("关闭")},
+        {TEXT("Button_SwordAttack1"),TEXT("持剑技能 1")},{TEXT("Button_SwordAttack2"),TEXT("持剑攻击 2")},{TEXT("Button_SwordAttack3"),TEXT("持剑攻击 3")},{TEXT("Button_SwordAttack4"),TEXT("持剑攻击 4")},{TEXT("Button_SwordAttack5"),TEXT("持剑技能 5")},
+        {TEXT("Button_FlyingSword1"),TEXT("御剑技能 1")},{TEXT("Button_FlyingSword2"),TEXT("御剑攻击 2")},{TEXT("Button_FlyingSword3"),TEXT("御剑攻击 3")},{TEXT("Button_EquipSelected"),TEXT("装配所选技能")},{TEXT("Button_ResetSkills"),TEXT("重置技能")}
+    };
     for (const FPage& Page : Pages)
     {
         const FString Path = FString::Printf(TEXT("/Game/CVAD/UI/%s.%s"), Page.Asset, Page.Asset);
@@ -377,7 +492,14 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
         UScrollBox* Root = Tree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("ControlRoot")); Tree->RootWidget = Root;
         UVerticalBox* Controls = Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Controls")); Root->AddChild(Controls);
         for (const FString& N : Page.Texts) { UTextBlock* W=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
-        for (const FString& N : Page.Buttons) { UButton* W=Tree->ConstructWidget<UButton>(UButton::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
+        for (const FString& N : Page.Buttons)
+        {
+            UButton* W=Tree->ConstructWidget<UButton>(UButton::StaticClass(),*N);W->bIsVariable=true;
+            UTextBlock* Label=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),*(TEXT("Label_")+N));
+            Label->SetText(FText::FromString(ButtonLabels.FindRef(N).IsEmpty()?N:ButtonLabels.FindRef(N)));
+            FSlateFontInfo Font=Label->GetFont();Font.Size=18;Label->SetFont(Font);Label->SetJustification(ETextJustify::Center);
+            W->AddChild(Label);Controls->AddChild(W);
+        }
         for (const FString& N : Page.Sliders) { USlider* W=Tree->ConstructWidget<USlider>(USlider::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
         for (const FString& N : Page.Checks) { UCheckBox* W=Tree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
         for (const FString& N : Page.Combos) { UComboBoxString* W=Tree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
@@ -389,5 +511,5 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
 
 bool UCVADEditorAssetBuilder::BuildAllWidgetLayouts()
 {
-    return BuildHUD() && BuildInventory();
+    return BuildMainHUDV2() && BuildMainMenuV2();
 }

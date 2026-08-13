@@ -54,6 +54,12 @@ private:
     UFUNCTION() void HandleOpenSettingsClicked();
     UFUNCTION() void HandleCloseClicked();
     UFUNCTION() void HandleConfirmNameClicked();
+    UFUNCTION() void OutfitHeadPrev(); UFUNCTION() void OutfitHeadNext(); UFUNCTION() void OutfitHairPrev(); UFUNCTION() void OutfitHairNext();
+    UFUNCTION() void OutfitHatPrev(); UFUNCTION() void OutfitHatNext(); UFUNCTION() void OutfitUpperPrev(); UFUNCTION() void OutfitUpperNext();
+    UFUNCTION() void OutfitHandsPrev(); UFUNCTION() void OutfitHandsNext(); UFUNCTION() void OutfitLowerPrev(); UFUNCTION() void OutfitLowerNext();
+    UFUNCTION() void OutfitFeetPrev(); UFUNCTION() void OutfitFeetNext();
+    UFUNCTION() void HandleOutfitConfirm();
+    void RefreshOutfitPreview();
     UFUNCTION() void HandleSettingsApplyClicked();
     UFUNCTION() void HandleSettingsResetClicked();
     UFUNCTION() void CaptureMoveForward();
@@ -82,4 +88,6 @@ private:
     void SetSaveSlotPreviewText(int32 SlotIndex, class UTextBlock* TextWidget);
     FName PendingRebindAction;
     FName SelectedSkillRow;
+    int32 PreviewOutfitParts[7] = {0,0,0,0,0,0,0};
+    void ChangeOutfitPart(int32 Part,int32 Direction);
 };

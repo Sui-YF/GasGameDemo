@@ -182,6 +182,9 @@ void ACVADPlayerController::ServerStartLobbyGame_Implementation()
 void ACVADPlayerController::BeginPlay()
 {
     Super::BeginPlay();
+    if (!PlayerMappingContext) PlayerMappingContext = LoadObject<UInputMappingContext>(nullptr, TEXT("/Game/CVAD/Input/IMC_Player.IMC_Player"));
+    if (!InventoryAction) InventoryAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/CVAD/Input/Actions/IA_Inventory.IA_Inventory"));
+    if (!PauseAction) PauseAction = LoadObject<UInputAction>(nullptr, TEXT("/Game/CVAD/Input/Actions/IA_Pause.IA_Pause"));
     if(IsLocalController() && GEngine && !NetworkFailureHandle.IsValid())
         NetworkFailureHandle=GEngine->OnNetworkFailure().AddUObject(this,&ThisClass::HandleNetworkFailure);
     if (!HUDWidgetClass) HUDWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_HUD.WBP_HUD_C"));
@@ -193,6 +196,10 @@ void ACVADPlayerController::BeginPlay()
     if (!SkillTreeWidgetClass) SkillTreeWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_SkillTree.WBP_SkillTree_C"));
     if (!SaveSlotsWidgetClass) SaveSlotsWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_SaveSlots.WBP_SaveSlots_C"));
     if (!NameEntryWidgetClass) NameEntryWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_NameEntry.WBP_NameEntry_C"));
+    if (!OutfitWidgetClass) OutfitWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_OutfitSelect.WBP_OutfitSelect_C"));
+    UE_LOG(LogCVADInput, Log, TEXT("UI/Input assets IMC=%s InventoryAction=%s PauseAction=%s InventoryUI=%s PauseUI=%s"),
+        *GetNameSafe(PlayerMappingContext), *GetNameSafe(InventoryAction), *GetNameSafe(PauseAction),
+        *GetNameSafe(InventoryWidgetClass), *GetNameSafe(PauseWidgetClass));
     const bool bMainMenuMap = GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
     if (IsLocalController() && bMainMenuMap)
     {
@@ -418,7 +425,8 @@ void ACVADPlayerController::SetupInputComponent()
     if (DodgeAction) Enhanced->BindAction(DodgeAction, ETriggerEvent::Started, this, &ThisClass::OnDodgePressed);
     if (FlyingSwordAction) Enhanced->BindAction(FlyingSwordAction, ETriggerEvent::Started, this, &ThisClass::OnFlyingSwordPressed);
     if (SwitchStanceAction) Enhanced->BindAction(SwitchStanceAction, ETriggerEvent::Started, this, &ThisClass::OnSwitchStancePressed);
-    if (InventoryAction) Enhanced->BindAction(InventoryAction, ETriggerEvent::Started, this, &ThisClass::ToggleInventory);
+    // Skill learning and loadout are frontend-only, so the old inventory action
+    // is intentionally not bound while playing a battle map.
     if (PauseAction) Enhanced->BindAction(PauseAction, ETriggerEvent::Started, this, &ThisClass::TogglePauseMenu);
     if (SprintAction)
     {
@@ -426,6 +434,9 @@ void ACVADPlayerController::SetupInputComponent()
         Enhanced->BindAction(SprintAction, ETriggerEvent::Completed, this, &ThisClass::StopSprint);
     }
     if (InteractAction) Enhanced->BindAction(InteractAction, ETriggerEvent::Started, this, &ThisClass::Interact);
+    // Direct UI shortcuts remain available even if an IMC asset is edited later.
+    InputComponent->BindKey(EKeys::F1, IE_Pressed, this, &ThisClass::ShowSettingsScreen);
+    InputComponent->BindKey(EKeys::F5, IE_Pressed, this, &ThisClass::ShowSaveSlotsScreen);
 }
 
 void ACVADPlayerController::Move(const FInputActionValue& Value)
@@ -484,23 +495,7 @@ void ACVADPlayerController::OnSwitchStancePressed() { UE_LOG(LogCVADInput, Log, 
 
 void ACVADPlayerController::ToggleInventory()
 {
-    UE_LOG(LogCVADInput, Log, TEXT("Input Inventory Toggle CurrentVisible=%s"),
-        InventoryWidget && InventoryWidget->IsInViewport() ? TEXT("true") : TEXT("false"));
-    if (!IsLocalController() || !InventoryWidgetClass) return;
-    if (InventoryWidget && InventoryWidget->IsInViewport())
-    {
-        InventoryWidget->RemoveFromParent();
-        SetInputMode(FInputModeGameOnly());
-        bShowMouseCursor = false;
-        return;
-    }
-    InventoryWidget = CreateWidget<UCVADUserWidget>(this, InventoryWidgetClass);
-    if (InventoryWidget)
-    {
-        InventoryWidget->AddToViewport(10);
-        SetInputMode(FInputModeGameAndUI());
-        bShowMouseCursor = true;
-    }
+    UE_LOG(LogCVADInput, Log, TEXT("Skill loadout input ignored during battle; configure it from the main menu"));
 }
 
 void ACVADPlayerController::ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetClass, int32 ZOrder)
@@ -516,10 +511,20 @@ void ACVADPlayerController::ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetC
 }
 
 void ACVADPlayerController::ShowSettingsScreen() { ShowModalWidget(SettingsWidgetClass); }
-void ACVADPlayerController::ShowSkillTreeScreen() { ShowModalWidget(SkillTreeWidgetClass); }
-void ACVADPlayerController::ShowInventoryScreen() { ShowModalWidget(InventoryWidgetClass); }
+void ACVADPlayerController::ShowSkillTreeScreen()
+{
+    const bool bFrontend = GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
+    if (bFrontend) ShowModalWidget(SkillTreeWidgetClass);
+    else UE_LOG(LogCVADInput, Warning, TEXT("Skill tree rejected outside frontend"));
+}
+void ACVADPlayerController::ShowInventoryScreen() { UE_LOG(LogCVADInput, Log, TEXT("Inventory/equipment feature disabled")); }
 void ACVADPlayerController::ShowSaveSlotsScreen() { ShowModalWidget(SaveSlotsWidgetClass, 50); }
 void ACVADPlayerController::ShowNameEntryScreen() { ShowModalWidget(NameEntryWidgetClass, 60); }
+void ACVADPlayerController::ShowOutfitScreen()
+{
+    const bool bFrontend=GetWorld()&&GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
+    if(bFrontend) ShowModalWidget(OutfitWidgetClass,55);
+}
 void ACVADPlayerController::SetPendingMenuAction(int32 Action,const FString& Address)
 {
     PendingMenuAction=Action; PendingServerAddress=Address; ShowNameEntryScreen();
@@ -573,5 +578,6 @@ void ACVADPlayerController::TogglePauseMenu()
             bShowMouseCursor = true;
         }
     }
+    else UE_LOG(LogCVADInput, Error, TEXT("Pause UI failed: PauseWidgetClass is null"));
     OnTogglePauseMenuRequested();
 }
