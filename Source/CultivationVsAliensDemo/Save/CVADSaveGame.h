@@ -11,7 +11,13 @@ class CULTIVATIONVSALIENSDEMO_API UCVADSaveGame : public USaveGame
 
 public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Profile")
-    int32 SaveVersion = 1;
+    int32 SaveVersion = 2;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Profile")
+    FString SavedAtLocalTime;
+
+    UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Profile")
+    float TotalPlayTimeSeconds = 0.f;
 
     UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, Category="Profile")
     FString PlayerDisplayName = TEXT("Player");

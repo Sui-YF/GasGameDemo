@@ -1,6 +1,7 @@
 #pragma once
 
 #include "UI/CVADUserWidget.h"
+#include "Inventory/CVADInventoryTypes.h"
 #include "CVADInventoryWidget.generated.h"
 
 UCLASS(Blueprintable)
@@ -17,6 +18,9 @@ protected:
     UFUNCTION() void ToggleFeet();
     UFUNCTION() void ToggleHands();
     UFUNCTION() void CloseInventory();
+    UFUNCTION() void RefreshEquipmentLabels(const FCVADEquipmentLoadout& NewLoadout);
+    void CycleSlot(ECVADItemType ItemSlot);
+    void SetButtonLabel(class UButton* Button, const FString& Prefix, FName ItemId);
 
     UPROPERTY(meta=(BindWidget)) TObjectPtr<class UButton> Button_Head;
     UPROPERTY(meta=(BindWidget)) TObjectPtr<class UButton> Button_Upper;

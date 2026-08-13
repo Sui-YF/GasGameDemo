@@ -67,6 +67,7 @@ void ACVADPlayerState::AddExperience(int32 Amount)
         ++PlayerLevel;
         ++SkillPoints;
         ApplyLevelGrowth();
+        RefreshEquippedAbilityLevels();
     }
     ForceNetUpdate();
 }
@@ -76,6 +77,17 @@ void ACVADPlayerState::RequestSpendSkillPoint(FName SkillRowName)
     if (HasAuthority()) ServerSpendSkillPoint_Implementation(SkillRowName);
     else ServerSpendSkillPoint(SkillRowName);
 }
+
+void ACVADPlayerState::SetLobbyReady(bool bReady)
+{
+    if (HasAuthority()) ServerSetLobbyReady_Implementation(bReady); else ServerSetLobbyReady(bReady);
+}
+void ACVADPlayerState::ServerSetLobbyReady_Implementation(bool bReady)
+{
+    bLobbyReady=bReady; ForceNetUpdate(); OnSkillLoadoutChanged.Broadcast();
+    UE_LOG(LogCVADSkills,Log,TEXT("Lobby ready Player=%s Ready=%s"),*GetPlayerName(),bReady?TEXT("true"):TEXT("false"));
+}
+void ACVADPlayerState::OnRep_LobbyReady(){OnSkillLoadoutChanged.Broadcast();}
 
 void ACVADPlayerState::ServerSpendSkillPoint_Implementation(FName SkillRowName)
 {
@@ -233,13 +245,27 @@ bool ACVADPlayerState::EquipSkillAuthority(ECVADAbilityInput Slot, FName SkillRo
     TSubclassOf<UGameplayAbility> AbilityClass = Row->AbilityClass.LoadSynchronous();
     if (!AbilityClass) return false;
     if (EquippedAbilityHandles[Index].IsValid()) AbilitySystemComponent->ClearAbility(EquippedAbilityHandles[Index]);
-    FGameplayAbilitySpec Spec(AbilityClass, 1, Index, this);
+    FGameplayAbilitySpec Spec(AbilityClass, PlayerLevel, Index, this);
     EquippedAbilityHandles[Index] = AbilitySystemComponent->GiveAbility(Spec);
     EquippedSkillRows[Index] = SkillRowName;
     ForceNetUpdate();
     OnSkillLoadoutChanged.Broadcast();
     UE_LOG(LogCVADSkills, Log, TEXT("Equipped skill %s in slot %d Ability=%s"), *SkillRowName.ToString(), Index, *GetNameSafe(AbilityClass));
     return true;
+}
+
+void ACVADPlayerState::RefreshEquippedAbilityLevels()
+{
+    if (!HasAuthority() || !AbilitySystemComponent) return;
+    for (const FGameplayAbilitySpecHandle& Handle : EquippedAbilityHandles)
+    {
+        if (FGameplayAbilitySpec* Spec = AbilitySystemComponent->FindAbilitySpecFromHandle(Handle))
+        {
+            Spec->Level = PlayerLevel;
+            AbilitySystemComponent->MarkAbilitySpecDirty(*Spec);
+        }
+    }
+    UE_LOG(LogCVADSkills, Log, TEXT("Refreshed equipped GAS ability levels to %d"), PlayerLevel);
 }
 
 FName ACVADPlayerState::GetEquippedSkill(ECVADAbilityInput Slot) const
@@ -258,4 +284,5 @@ void ACVADPlayerState::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& Out
     DOREPLIFETIME(ACVADPlayerState, PlayerLevel);
     DOREPLIFETIME(ACVADPlayerState, Experience);
     DOREPLIFETIME(ACVADPlayerState, SkillPoints);
+    DOREPLIFETIME(ACVADPlayerState, bLobbyReady);
 }

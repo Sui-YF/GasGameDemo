@@ -25,7 +25,7 @@ public:
     void AdvancePhase();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterBoss(class ACVADEnemyCharacter* Boss);
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void UpdateBossHealth(float Current, float Maximum);
-    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void CompleteBossBattle();
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void CompleteBossBattle(class ACVADEnemyCharacter* DefeatedBoss);
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterPlayerDown();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterPlayerRevived();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterExperienceReward(int32 Amount);
@@ -53,6 +53,8 @@ public:
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Battle|Results") float CompletionTimeSeconds = 0.f;
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Battle|Results") int32 ExperienceEarned = 0;
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Battle|Boss") TObjectPtr<class ACVADEnemyCharacter> RegisteredBoss;
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Battle|Boss") TArray<TObjectPtr<class ACVADEnemyCharacter>> RegisteredBosses;
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Battle|Boss") int32 BossesRemaining = 0;
 
 protected:
     float BattleStartTimeSeconds = 0.f;

@@ -59,14 +59,14 @@ void UCVADHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
         switch (BattleDirector->BattlePhase)
         {
         case ECVADBattlePhase::Frontline: PhaseText = NSLOCTEXT("CVAD", "FrontlinePhase", "清剿外星机械军团"); break;
-        case ECVADBattlePhase::Boss: PhaseText = NSLOCTEXT("CVAD", "BossPhase", "击败外星机械统领"); break;
+        case ECVADBattlePhase::Boss: PhaseText = FText::Format(NSLOCTEXT("CVAD", "BossPhase", "击败天穹三使（剩余 {0}）"), BattleDirector->BossesRemaining); break;
         case ECVADBattlePhase::Results: PhaseText = NSLOCTEXT("CVAD", "ResultsPhase", "战斗结束"); break;
         default: break;
         }
         if (ObjectiveText) ObjectiveText->SetText(PhaseText);
         const bool bBoss = BattleDirector->BattlePhase == ECVADBattlePhase::Boss;
         if (BossHealthBar) { BossHealthBar->SetPercent(BattleDirector->BossMaxHealth>0.f ? BattleDirector->BossHealth/BattleDirector->BossMaxHealth : 0.f); BossHealthBar->SetVisibility(bBoss?ESlateVisibility::Visible:ESlateVisibility::Collapsed); }
-        if (BossNameText) { BossNameText->SetText(NSLOCTEXT("CVAD","BossName","外星机械统领")); BossNameText->SetVisibility(bBoss?ESlateVisibility::Visible:ESlateVisibility::Collapsed); }
+        if (BossNameText) { BossNameText->SetText(FText::Format(NSLOCTEXT("CVAD","BossName","天穹三使 · 剑士 / 翼卫 / 天术师  [{0}/3]"),BattleDirector->BossesRemaining)); BossNameText->SetVisibility(bBoss?ESlateVisibility::Visible:ESlateVisibility::Collapsed); }
         if (ResultStateText) ResultStateText->SetText(BattleDirector->bVictory?NSLOCTEXT("CVAD","Victory","胜利"):(BattleDirector->bDefeat?NSLOCTEXT("CVAD","Defeat","失败"):FText::GetEmpty()));
     }
 }

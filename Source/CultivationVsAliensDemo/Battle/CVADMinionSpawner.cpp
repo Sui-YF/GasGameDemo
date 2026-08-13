@@ -190,14 +190,17 @@ void ACVADMinionSpawner::CompleteSpawner()
     StopSpawning();
     ACVADBattleDirector* Director = nullptr;
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { Director = *It; break; }
-    if (BossClass && (!Director || !IsValid(Director->RegisteredBoss)))
+    if (BossClass && (!Director || Director->RegisteredBosses.IsEmpty()))
     {
-        FActorSpawnParameters Params;
-        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-        ACVADEnemyCharacter* Boss = GetWorld()->SpawnActor<ACVADEnemyCharacter>(BossClass,
-            GetActorTransform().TransformPosition(BossSpawnOffset), GetActorRotation(), Params);
-        if (Director && Boss) Director->RegisterBoss(Boss);
-        UE_LOG(LogCVADSpawner, Log, TEXT("Spawner %s completed and spawned Boss=%s"), *GetName(), *GetNameSafe(Boss));
+        for(int32 Index=0;Index<3;++Index)
+        {
+            FActorSpawnParameters Params; Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+            const FVector FormationOffset=BossSpawnOffset+FVector(0.f,(Index-1)*360.f,0.f);
+            ACVADEnemyCharacter* Boss=GetWorld()->SpawnActor<ACVADEnemyCharacter>(BossClass,GetActorTransform().TransformPosition(FormationOffset),GetActorRotation(),Params);
+            if(Boss) Boss->SetBossRole(Index);
+            if(Director && Boss) Director->RegisterBoss(Boss);
+            UE_LOG(LogCVADSpawner,Log,TEXT("Spawner %s spawned Angel Boss %d/3=%s"),*GetName(),Index+1,*GetNameSafe(Boss));
+        }
     }
     OnSpawnerCompleted();
     ForceNetUpdate();

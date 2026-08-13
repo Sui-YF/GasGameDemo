@@ -4,6 +4,8 @@
 #include "Enemy/CVADEnemyCharacter.h"
 #include "EngineUtils.h"
 #include "Battle/CVADMinionSpawner.h"
+#include "AbilitySystem/CVADAttributeSet.h"
+#include "AbilitySystemComponent.h"
 
 ACVADBattleDirector::ACVADBattleDirector()
 {
@@ -13,8 +15,12 @@ ACVADBattleDirector::ACVADBattleDirector()
 
 void ACVADBattleDirector::RegisterBoss(ACVADEnemyCharacter* Boss)
 {
-    if (!HasAuthority()) return;
+    if (!HasAuthority() || !IsValid(Boss)) return;
     RegisteredBoss = Boss;
+    RegisteredBosses.AddUnique(Boss);
+    BossesRemaining=0; BossHealth=0.f; BossMaxHealth=0.f;
+    for(const ACVADEnemyCharacter* Entry : RegisteredBosses) if(IsValid(Entry))
+    { ++BossesRemaining; BossHealth+=Entry->GetAbilitySystemComponent()->GetNumericAttribute(UCVADAttributeSet::GetHealthAttribute()); BossMaxHealth+=Entry->GetAbilitySystemComponent()->GetNumericAttribute(UCVADAttributeSet::GetMaxHealthAttribute()); }
     // A boss may already be placed in the map. Registration must not skip the frontline objective.
     if (BattlePhase == ECVADBattlePhase::Boss)
     {
@@ -26,12 +32,19 @@ void ACVADBattleDirector::RegisterBoss(ACVADEnemyCharacter* Boss)
 void ACVADBattleDirector::UpdateBossHealth(float Current, float Maximum)
 {
     if (!HasAuthority()) return;
-    BossHealth = FMath::Max(0.f, Current); BossMaxHealth = FMath::Max(1.f, Maximum); ForceNetUpdate();
+    BossHealth=0.f; BossMaxHealth=0.f;
+    for(const ACVADEnemyCharacter* Entry : RegisteredBosses) if(IsValid(Entry))
+    { BossHealth+=FMath::Max(0.f,Entry->GetAbilitySystemComponent()->GetNumericAttribute(UCVADAttributeSet::GetHealthAttribute())); BossMaxHealth+=FMath::Max(1.f,Entry->GetAbilitySystemComponent()->GetNumericAttribute(UCVADAttributeSet::GetMaxHealthAttribute())); }
+    ForceNetUpdate();
 }
 
-void ACVADBattleDirector::CompleteBossBattle()
+void ACVADBattleDirector::CompleteBossBattle(ACVADEnemyCharacter* DefeatedBoss)
 {
-    if (!HasAuthority()) return;
+    if (!HasAuthority() || BattlePhase != ECVADBattlePhase::Boss || bVictory || bDefeat) return;
+    RegisteredBosses.Remove(DefeatedBoss);
+    BossesRemaining=0; for(const ACVADEnemyCharacter* Entry : RegisteredBosses) if(IsValid(Entry)) ++BossesRemaining;
+    UpdateBossHealth(0.f,1.f);
+    if(BossesRemaining>0) { UE_LOG(LogTemp,Log,TEXT("Angel boss defeated; %d remain"),BossesRemaining); ForceNetUpdate(); return; }
     const ECVADBattlePhase Previous = BattlePhase;
     BattlePhase = ECVADBattlePhase::Results; bVictory = true; BossHealth = 0.f;
     CompletionTimeSeconds = FMath::Max(0.f, GetWorld()->GetTimeSeconds() - BattleStartTimeSeconds);
@@ -45,17 +58,18 @@ void ACVADBattleDirector::RegisterPlayerDown()
     const int32 Players = GetWorld()->GetGameState() ? GetWorld()->GetGameState()->PlayerArray.Num() : 1;
     if (DownedPlayerCount >= FMath::Max(1, Players))
     {
+        const ECVADBattlePhase Previous=BattlePhase;
         bDefeat = true; BattlePhase = ECVADBattlePhase::Results;
         CompletionTimeSeconds = FMath::Max(0.f, GetWorld()->GetTimeSeconds() - BattleStartTimeSeconds);
+        OnBattlePhaseChanged.Broadcast(Previous,BattlePhase);
     }
     ForceNetUpdate();
 }
 
 void ACVADBattleDirector::RegisterPlayerRevived()
 {
-    if (!HasAuthority()) return;
+    if (!HasAuthority() || bVictory || bDefeat) return;
     DownedPlayerCount = FMath::Max(0, DownedPlayerCount - 1);
-    if (!bVictory) { bDefeat = false; if (BattlePhase == ECVADBattlePhase::Results) BattlePhase = ECVADBattlePhase::Frontline; }
     ForceNetUpdate();
 }
 
@@ -142,6 +156,8 @@ void ACVADBattleDirector::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& 
     DOREPLIFETIME(ACVADBattleDirector, bDefeat);
     DOREPLIFETIME(ACVADBattleDirector, DownedPlayerCount);
     DOREPLIFETIME(ACVADBattleDirector, RegisteredBoss);
+    DOREPLIFETIME(ACVADBattleDirector, RegisteredBosses);
+    DOREPLIFETIME(ACVADBattleDirector, BossesRemaining);
     DOREPLIFETIME(ACVADBattleDirector, CompletionTimeSeconds);
     DOREPLIFETIME(ACVADBattleDirector, ExperienceEarned);
 }

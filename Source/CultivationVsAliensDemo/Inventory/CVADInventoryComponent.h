@@ -33,6 +33,9 @@ public:
     UFUNCTION(BlueprintCallable, Category="Inventory")
     void RequestEquipItem(ECVADItemType Slot, FName ItemId);
 
+    UFUNCTION(BlueprintPure, Category="Inventory") TArray<FName> GetOwnedItemsForSlot(ECVADItemType Slot) const;
+    UFUNCTION(BlueprintPure, Category="Inventory") bool CanChangeEquipment(FText& FailureReason) const;
+
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Inventory")
     void RestoreInventory(const TArray<FName>& ItemIds, const FCVADEquipmentLoadout& SavedLoadout);
 

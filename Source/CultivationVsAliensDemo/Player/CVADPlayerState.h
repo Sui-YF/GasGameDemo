@@ -40,6 +40,8 @@ public:
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 PlayerLevel = 1;
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 Experience = 0;
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 SkillPoints = 0;
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_LobbyReady, Category="Lobby") bool bLobbyReady = false;
+    UFUNCTION(BlueprintCallable, Category="Lobby") void SetLobbyReady(bool bReady);
     void RequestRestoreProfile(int32 InLevel, int32 InExperience, int32 InSkillPoints,
         const TArray<FName>& InUnlockedSkills, const TArray<FName>& InEquippedSkills,
         const TArray<FName>& InUnlockedItems, const FCVADEquipmentLoadout& InEquipment);
@@ -56,6 +58,8 @@ protected:
 
 private:
     UFUNCTION(Server, Reliable) void ServerSpendSkillPoint(FName SkillRowName);
+    UFUNCTION(Server, Reliable) void ServerSetLobbyReady(bool bReady);
+    UFUNCTION() void OnRep_LobbyReady();
     bool UnlockSkillAuthority(FName SkillRowName);
     UFUNCTION(Server, Reliable) void ServerEquipSkill(ECVADAbilityInput Slot, FName SkillRowName);
     UFUNCTION(Server, Reliable) void ServerRestoreProfile(int32 InLevel, int32 InExperience, int32 InSkillPoints,
@@ -71,4 +75,5 @@ private:
     FTimerHandle ResourceRegenTimer;
     void RegenerateResources();
     void ApplyLevelGrowth();
+    void RefreshEquippedAbilityLevels();
 };

@@ -23,6 +23,9 @@ public class CultivationVsAliensDemo : ModuleRules
             "SlateCore"
             ,"AIModule"
             ,"NavigationSystem"
+            ,"HTTP"
+            ,"ApplicationCore"
+            ,"Sockets"
         });
     }
 }

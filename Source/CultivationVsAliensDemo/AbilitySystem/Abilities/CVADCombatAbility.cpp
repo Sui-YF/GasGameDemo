@@ -13,6 +13,7 @@
 #include "EngineUtils.h"
 #include "AbilitySystem/Effects/CVADCooldownEffect.h"
 #include "GameplayTagsManager.h"
+#include "Combat/CVADFlyingSwordProjectile.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCVADCombatAbility, Log, All);
 
@@ -45,12 +46,14 @@ bool UCVADCombatAbility::CanActivateAbility(const FGameplayAbilitySpecHandle Han
         || !ActorInfo->AbilitySystemComponent->HasMatchingGameplayTag(GetCooldownTag());
 }
 
-void UCVADCombatAbility::ApplyCooldownEffect(UAbilitySystemComponent* AbilitySystem) const
+void UCVADCombatAbility::ApplyCooldownEffect(UAbilitySystemComponent* AbilitySystem, int32 AbilityLevel) const
 {
     if (!AbilitySystem || CooldownSeconds <= 0.f) return;
     FGameplayEffectSpecHandle Spec = AbilitySystem->MakeOutgoingSpec(UCVADCooldownEffect::StaticClass(), 1.f, AbilitySystem->MakeEffectContext());
     if (!Spec.IsValid()) return;
-    Spec.Data->SetSetByCallerMagnitude(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("Data.Cooldown")), CooldownSeconds);
+    const float EffectiveCooldown = CooldownSeconds * FMath::Max(0.5f,
+        1.f - CooldownReductionPerLevel * FMath::Max(0, AbilityLevel - 1));
+    Spec.Data->SetSetByCallerMagnitude(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("Data.Cooldown")), EffectiveCooldown);
     Spec.Data->DynamicGrantedTags.AddTag(GetCooldownTag());
     AbilitySystem->ApplyGameplayEffectSpecToSelf(*Spec.Data.Get());
 }
@@ -68,6 +71,9 @@ void UCVADCombatAbility::ActivateAbility(
     }
 
     UAbilitySystemComponent* AbilitySystem = ActorInfo->AbilitySystemComponent.Get();
+    const int32 AbilityLevel = FMath::Max(1, GetAbilityLevel(Handle, ActorInfo));
+    const float EffectiveDamage = Damage * (1.f + DamageGrowthPerLevel * (AbilityLevel - 1));
+    const float EffectiveRadius = AttackRadius * (1.f + RadiusGrowthPerLevel * (AbilityLevel - 1));
     if (!ConsumeResource(AbilitySystem))
     {
         UE_LOG(LogCVADCombatAbility, Warning, TEXT("Ability %s rejected: insufficient resource type=%d cost=%.1f"),
@@ -75,7 +81,7 @@ void UCVADCombatAbility::ActivateAbility(
         EndAbility(Handle, ActorInfo, ActivationInfo, true, true);
         return;
     }
-    ApplyCooldownEffect(AbilitySystem);
+    ApplyCooldownEffect(AbilitySystem, AbilityLevel);
 
     if (ActorInfo->IsNetAuthority())
     {
@@ -99,29 +105,57 @@ void UCVADCombatAbility::ActivateAbility(
             }
             if (bAutoTargetNearest)
             {
-                AActor* Nearest = nullptr;
-                float NearestSq = FMath::Square(FMath::Max(AttackDistance, 1500.f));
+                TArray<ACVADEnemyCharacter*> Candidates;
                 for (TActorIterator<ACVADEnemyCharacter> It(Character->GetWorld()); It; ++It)
                 {
-                    const float DistanceSq = FVector::DistSquared(Character->GetActorLocation(), It->GetActorLocation());
-                    if (DistanceSq < NearestSq) { NearestSq = DistanceSq; Nearest = *It; }
+                    if (FVector::DistSquared(Character->GetActorLocation(), It->GetActorLocation()) <=
+                        FMath::Square(FMath::Max(AttackDistance, 1500.f))) Candidates.Add(*It);
                 }
-                if (Nearest)
+                Candidates.Sort([Character](const ACVADEnemyCharacter& A, const ACVADEnemyCharacter& B)
                 {
+                    return FVector::DistSquared(Character->GetActorLocation(), A.GetActorLocation()) <
+                        FVector::DistSquared(Character->GetActorLocation(), B.GetActorLocation());
+                });
+                if (!Candidates.IsEmpty())
+                {
+                    ACVADEnemyCharacter* Nearest = Candidates[0];
                     const FRotator TargetRotation = (Nearest->GetActorLocation() - Character->GetActorLocation()).Rotation();
                     Character->SetActorRotation(FRotator(0.f, TargetRotation.Yaw, 0.f));
                     UE_LOG(LogCVADCombatAbility, Log, TEXT("Flying sword auto-target=%s"), *GetNameSafe(Nearest));
+                    if (bSpawnHomingSword)
+                    {
+                        const int32 Count = FMath::Clamp(HomingSwordCount, 1, 3);
+                        for (int32 Index = 0; Index < Count; ++Index)
+                        {
+                            ACVADEnemyCharacter* Target = Candidates[Index % Candidates.Num()];
+                            const float SideOffset = (Index - (Count - 1) * 0.5f) * 100.f;
+                            const FVector SpawnLocation = Character->GetActorLocation() + FVector(0.f, 0.f, 115.f)
+                                + Character->GetActorRightVector() * SideOffset;
+                            const FRotator SpawnRotation = (Target->GetActorLocation() - SpawnLocation).Rotation();
+                            FActorSpawnParameters Params;
+                            Params.Owner = Character;
+                            Params.Instigator = Character;
+                            Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+                            if (ACVADFlyingSwordProjectile* Projectile = Character->GetWorld()->SpawnActor<ACVADFlyingSwordProjectile>(
+                                ACVADFlyingSwordProjectile::StaticClass(), SpawnLocation, SpawnRotation, Params))
+                            {
+                            Projectile->InitializeProjectile(Character, Target, EffectiveDamage / Count);
+                                UE_LOG(LogCVADCombatAbility, Log, TEXT("Flying sword %d/%d target=%s Damage=%.1f"),
+                                    Index + 1, Count, *GetNameSafe(Target), EffectiveDamage / Count);
+                            }
+                        }
+                    }
                 }
             }
-            if (AbilityInput != ECVADAbilityInput::SwitchStance)
+            if (AbilityInput != ECVADAbilityInput::SwitchStance && !bSpawnHomingSword)
             {
-                Character->QueueAttackDamage(Damage, AttackDistance, AttackRadius,
+                Character->QueueAttackDamage(EffectiveDamage, AttackDistance, EffectiveRadius,
                     AbilityInput == ECVADAbilityInput::FlyingSword ? true : bThisHitMultiple);
             }
             Character->PlayReplicatedActionAnimation(AnimationToPlay);
         }
         UE_LOG(LogCVADCombatAbility, Log, TEXT("Server executing %s Avatar=%s Damage=%.1f Distance=%.1f Radius=%.1f"),
-            *GetNameSafe(this), *GetNameSafe(ActorInfo->AvatarActor.Get()), Damage, AttackDistance, AttackRadius);
+            *GetNameSafe(this), *GetNameSafe(ActorInfo->AvatarActor.Get()), EffectiveDamage, AttackDistance, EffectiveRadius);
     }
 
     EndAbility(Handle, ActorInfo, ActivationInfo, true, false);

@@ -12,6 +12,14 @@
 #include "Player/CVADPlayerState.h"
 #include "GameFramework/PlayerController.h"
 #include "Character/CVADCharacter.h"
+#include "TimerManager.h"
+#include "AIController.h"
+#include "GameplayTagsManager.h"
+#include "DrawDebugHelpers.h"
+#include "Components/SkeletalMeshComponent.h"
+#include "UObject/ConstructorHelpers.h"
+#include "Animation/AnimInstance.h"
+#include "Animation/AnimSequenceBase.h"
 
 ACVADEnemyCharacter::ACVADEnemyCharacter()
 {
@@ -23,6 +31,26 @@ ACVADEnemyCharacter::ACVADEnemyCharacter()
     AbilitySystemComponent->SetIsReplicated(true);
     AbilitySystemComponent->SetReplicationMode(EGameplayEffectReplicationMode::Minimal);
     AttributeSet = CreateDefaultSubobject<UCVADAttributeSet>(TEXT("AttributeSet"));
+    AngelWingLeft=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("AngelWingLeft"));
+    AngelWingLeft->SetupAttachment(GetMesh()); AngelWingLeft->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    AngelWingRight=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("AngelWingRight"));
+    AngelWingRight->SetupAttachment(GetMesh()); AngelWingRight->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    AngelSword=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("AngelSword"));
+    AngelSword->SetupAttachment(GetMesh(),TEXT("Weapon_r")); AngelSword->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    static ConstructorHelpers::FObjectFinder<USkeletalMesh> WingL(TEXT("/Game/GhostLady_S2/Meshes/Wings/SK_Wing_L.SK_Wing_L"));
+    static ConstructorHelpers::FObjectFinder<USkeletalMesh> WingR(TEXT("/Game/GhostLady_S2/Meshes/Wings/SK_Wing_R.SK_Wing_R"));
+    static ConstructorHelpers::FClassFinder<UAnimInstance> WingAnim(TEXT("/Game/GhostLady_S2/Animations/In-Place/Wings/Wings_AnimBP"));
+    static ConstructorHelpers::FObjectFinder<USkeletalMesh> LongSword(TEXT("/Game/GhostLady_S2/Meshes/Weapons/SK_LongSword.SK_LongSword"));
+    if(WingL.Succeeded()) AngelWingLeft->SetSkeletalMesh(WingL.Object);
+    if(WingR.Succeeded()) AngelWingRight->SetSkeletalMesh(WingR.Object);
+    if(WingAnim.Succeeded()){AngelWingLeft->SetAnimInstanceClass(WingAnim.Class);AngelWingRight->SetAnimInstanceClass(WingAnim.Class);}
+    if(LongSword.Succeeded()) AngelSword->SetSkeletalMesh(LongSword.Object);
+    static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SwordAttackAsset(TEXT("/Game/GhostLady_S2/Animations/RootMotion/Knight/Anim_Knight_Attack2.Anim_Knight_Attack2"));
+    static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> WingAttackAsset(TEXT("/Game/GhostLady_S2/Animations/RootMotion/FlyingAttack/Anim_Flying_FlashFwd.Anim_Flying_FlashFwd"));
+    static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> CasterAttackAsset(TEXT("/Game/GhostLady_S2/Animations/RootMotion/FlyingAttack/Anim_Flying_CallOfHeaven.Anim_Flying_CallOfHeaven"));
+    if(SwordAttackAsset.Succeeded()) SwordBossAttack=SwordAttackAsset.Object;
+    if(WingAttackAsset.Succeeded()) WingBossAttack=WingAttackAsset.Object;
+    if(CasterAttackAsset.Succeeded()) CasterBossAttack=CasterAttackAsset.Object;
     // 300 m render range and 500 m network relevancy range. No HiddenInGame is used.
     GetMesh()->SetCullDistance(30000.f);
     GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
@@ -39,10 +67,48 @@ void ACVADEnemyCharacter::SetSpawnSource(ACVADMinionSpawner* InSpawnSource)
     SpawnSource = InSpawnSource;
 }
 
+void ACVADEnemyCharacter::SetBossRole(int32 NewRole)
+{
+    if(!HasAuthority() || !bIsBoss) return;
+    BossRole=FMath::Clamp(NewRole,0,2);
+    if(ACVADEnemyAIController* AI=Cast<ACVADEnemyAIController>(GetController())) AI->ConfigureBossRole(BossRole);
+    ApplyBossRoleVisuals(); OnBossRoleChanged(BossRole); ForceNetUpdate();
+    UE_LOG(LogTemp,Log,TEXT("Angel Boss %s role=%d"),*GetName(),BossRole);
+}
+
+void ACVADEnemyCharacter::PlayBossAttackAnimation()
+{
+    if(HasAuthority() && bIsBoss) MulticastPlayBossAttack(BossRole);
+}
+
+void ACVADEnemyCharacter::MulticastPlayBossAttack_Implementation(int32 AttackRole)
+{
+    UAnimSequenceBase* Sequence=AttackRole==0?SwordBossAttack:(AttackRole==1?WingBossAttack:CasterBossAttack);
+    UAnimInstance* Anim=GetMesh()?GetMesh()->GetAnimInstance():nullptr;
+    if(!Anim || !Sequence) return;
+    Anim->PlaySlotAnimationAsDynamicMontage(Sequence,TEXT("DefaultSlot"),0.12f,0.18f,1.f,1,0.f,0.f);
+    UE_LOG(LogTemp,Verbose,TEXT("Angel Boss animation Role=%d Sequence=%s"),AttackRole,*GetNameSafe(Sequence));
+}
+
+void ACVADEnemyCharacter::OnRep_BossRole(){ApplyBossRoleVisuals();OnBossRoleChanged(BossRole);}
+
+void ACVADEnemyCharacter::ApplyBossRoleVisuals()
+{
+    if(!bIsBoss || !GetMesh()) return;
+    static USkeletalMesh* Bodies[3]={
+        LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/GhostLady_S2/Meshes/Characters/Combines/SK_GhostLadyS2_A.SK_GhostLadyS2_A")),
+        LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/GhostLady_S2/Meshes/Characters/Combines/SK_GhostLadyS2_B.SK_GhostLadyS2_B")),
+        LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/GhostLady_S2/Meshes/Characters/Combines/SK_GhostLadyS2D_B.SK_GhostLadyS2D_B"))};
+    if(Bodies[BossRole] && GetMesh()->GetSkeletalMeshAsset()!=Bodies[BossRole]) GetMesh()->SetSkeletalMesh(Bodies[BossRole]);
+    if(AngelSword) AngelSword->SetVisibility(BossRole==0,true);
+}
+
 void ACVADEnemyCharacter::BeginPlay()
 {
     Super::BeginPlay();
     bIsBoss = bIsBoss || BalanceRowName == TEXT("Boss");
+    AngelWingLeft->SetVisibility(bIsBoss,true); AngelWingRight->SetVisibility(bIsBoss,true);
+    AngelSword->SetVisibility(false,true);
     GetMesh()->SetCullDistance(VisualCullDistance);
     NetCullDistanceSquared = FMath::Square(NetworkCullDistance);
     AbilitySystemComponent->InitAbilityActorInfo(this, this);
@@ -88,6 +154,7 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
         OnEnemyDamaged(ChangeData.OldValue - ChangeData.NewValue);
         if (HasAuthority() && !bIsBoss)
         {
+            BeginHitStun(MinionHitStunDuration);
             AActor* NearestPlayer = nullptr;
             float BestSq = TNumericLimits<float>::Max();
             for (TActorIterator<ACVADCharacter> It(GetWorld()); It; ++It)
@@ -108,7 +175,8 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
         { It->UpdateBossHealth(ChangeData.NewValue, AttributeSet->GetMaxHealth()); break; }
     if (!HasAuthority() || bDeathHandled || ChangeData.NewValue > 0.f) return;
     bDeathHandled = true;
-    if (bIsBoss) for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->CompleteBossBattle(); break; }
+    if (ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(GetController())) AI->CancelPendingAttack();
+    if (bIsBoss) for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->CompleteBossBattle(this); break; }
     if (SpawnSource.IsValid()) SpawnSource->NotifySpawnedMinionDefeated(this);
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
     {
@@ -132,6 +200,7 @@ void ACVADEnemyCharacter::EvaluateBossPhase(float CurrentHealth)
     const int32 NewPhase = Ratio <= 0.35f ? 3 : (Ratio <= 0.70f ? 2 : 1);
     if (NewPhase == BossPhase) return;
     BossPhase = NewPhase;
+    BeginHitStun(BossPhaseHitStunDuration);
     if (ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(GetController())) AI->ApplyBossPhase(BossPhase);
     OnBossPhaseChanged(BossPhase);
     ForceNetUpdate();
@@ -139,8 +208,104 @@ void ACVADEnemyCharacter::EvaluateBossPhase(float CurrentHealth)
 
 void ACVADEnemyCharacter::OnRep_BossPhase() { OnBossPhaseChanged(BossPhase); }
 
+void ACVADEnemyCharacter::BeginHitStun(float Duration)
+{
+    if (!HasAuthority() || Duration <= 0.f || bDeathHandled) return;
+    if (ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(GetController())) AI->CancelPendingAttack();
+    bHitStunned = true;
+    AbilitySystemComponent->AddLooseGameplayTag(
+        UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.HitStunned")));
+    if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
+    GetWorldTimerManager().ClearTimer(HitStunTimer);
+    GetWorldTimerManager().SetTimer(HitStunTimer, this, &ThisClass::EndHitStun, Duration, false);
+    OnHitStunChanged(true);
+    ForceNetUpdate();
+    UE_LOG(LogTemp, Log, TEXT("Enemy %s hit-stunned Duration=%.2f Boss=%s"), *GetName(), Duration,
+        bIsBoss ? TEXT("true") : TEXT("false"));
+}
+
+void ACVADEnemyCharacter::EndHitStun()
+{
+    if (!HasAuthority()) return;
+    bHitStunned = false;
+    AbilitySystemComponent->RemoveLooseGameplayTag(
+        UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.HitStunned")));
+    OnHitStunChanged(false);
+    ForceNetUpdate();
+}
+
+void ACVADEnemyCharacter::OnRep_HitStunned()
+{
+    OnHitStunChanged(bHitStunned);
+}
+
+void ACVADEnemyCharacter::BeginAttackTelegraph(const FVector& Center, float Radius, float Duration)
+{
+    BeginShapedAttackTelegraph(Center, Radius, Duration, 0, GetActorForwardVector());
+}
+
+void ACVADEnemyCharacter::BeginShapedAttackTelegraph(const FVector& Center, float Radius, float Duration, int32 Shape, const FVector& Direction)
+{
+    if (!HasAuthority() || bDeathHandled) return;
+    bAttackTelegraphActive = true;
+    AttackTelegraphCenter = Center;
+    AttackTelegraphRadius = FMath::Max(0.f, Radius);
+    AttackTelegraphDuration = FMath::Max(0.f, Duration);
+    AttackTelegraphShape = FMath::Clamp(Shape, 0, 2);
+    AttackTelegraphDirection = Direction.GetSafeNormal2D();
+    OnAttackTelegraphChanged(true, AttackTelegraphCenter, AttackTelegraphRadius, AttackTelegraphDuration);
+    DrawAttackTelegraphPlaceholder();
+    ForceNetUpdate();
+}
+
+void ACVADEnemyCharacter::EndAttackTelegraph()
+{
+    if (!HasAuthority() || !bAttackTelegraphActive) return;
+    bAttackTelegraphActive = false;
+    OnAttackTelegraphChanged(false, AttackTelegraphCenter, AttackTelegraphRadius, 0.f);
+    ForceNetUpdate();
+}
+
+void ACVADEnemyCharacter::OnRep_AttackTelegraph()
+{
+    OnAttackTelegraphChanged(bAttackTelegraphActive, AttackTelegraphCenter, AttackTelegraphRadius,
+        bAttackTelegraphActive ? AttackTelegraphDuration : 0.f);
+    if (bAttackTelegraphActive) DrawAttackTelegraphPlaceholder();
+}
+
+void ACVADEnemyCharacter::DrawAttackTelegraphPlaceholder() const
+{
+    if (!GetWorld() || !bAttackTelegraphActive || AttackTelegraphRadius <= 0.f) return;
+    const FVector Center = FVector(AttackTelegraphCenter) + FVector(0.f, 0.f, 8.f);
+    const FVector Forward=FVector(AttackTelegraphDirection).GetSafeNormal2D();
+    const FVector Right=FVector::CrossProduct(FVector::UpVector,Forward);
+    if(AttackTelegraphShape==1)
+    {
+        const FVector Origin=GetActorLocation()+FVector(0,0,8); const float HalfAngle=45.f;
+        DrawDebugLine(GetWorld(),Origin,Origin+Forward.RotateAngleAxis(-HalfAngle,FVector::UpVector)*AttackTelegraphRadius,FColor::Red,false,AttackTelegraphDuration,0,7.f);
+        DrawDebugLine(GetWorld(),Origin,Origin+Forward.RotateAngleAxis(HalfAngle,FVector::UpVector)*AttackTelegraphRadius,FColor::Red,false,AttackTelegraphDuration,0,7.f);
+        DrawDebugCircle(GetWorld(),Origin,AttackTelegraphRadius,24,FColor::Orange,false,AttackTelegraphDuration,0,3.f,Right,Forward,false);
+    }
+    else if(AttackTelegraphShape==2)
+    {
+        const float HalfWidth=AttackTelegraphRadius*0.28f; const FVector Start=Center-Forward*AttackTelegraphRadius*0.5f; const FVector End=Center+Forward*AttackTelegraphRadius*0.5f;
+        DrawDebugLine(GetWorld(),Start+Right*HalfWidth,End+Right*HalfWidth,FColor::Yellow,false,AttackTelegraphDuration,0,7.f);
+        DrawDebugLine(GetWorld(),Start-Right*HalfWidth,End-Right*HalfWidth,FColor::Yellow,false,AttackTelegraphDuration,0,7.f);
+        DrawDebugLine(GetWorld(),End-Right*HalfWidth,End+Right*HalfWidth,FColor::Orange,false,AttackTelegraphDuration,0,5.f);
+    }
+    else DrawDebugCircle(GetWorld(),Center,AttackTelegraphRadius,48,FColor::Purple,false,AttackTelegraphDuration,0,7.f,FVector::RightVector,FVector::ForwardVector,false);
+}
+
 void ACVADEnemyCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLifetimeProps) const
 {
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACVADEnemyCharacter, BossPhase);
+    DOREPLIFETIME(ACVADEnemyCharacter, BossRole);
+    DOREPLIFETIME(ACVADEnemyCharacter, bHitStunned);
+    DOREPLIFETIME(ACVADEnemyCharacter, bAttackTelegraphActive);
+    DOREPLIFETIME(ACVADEnemyCharacter, AttackTelegraphCenter);
+    DOREPLIFETIME(ACVADEnemyCharacter, AttackTelegraphRadius);
+    DOREPLIFETIME(ACVADEnemyCharacter, AttackTelegraphDuration);
+    DOREPLIFETIME(ACVADEnemyCharacter, AttackTelegraphShape);
+    DOREPLIFETIME(ACVADEnemyCharacter, AttackTelegraphDirection);
 }

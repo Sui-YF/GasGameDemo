@@ -125,7 +125,13 @@ void ACVADCharacter::PossessedBy(AController* NewController)
 
 void ACVADCharacter::HandlePlayerHealthChanged(const FOnAttributeChangeData& ChangeData)
 {
-    if (!HasAuthority() || bPlayerDown || ChangeData.NewValue > 0.f) return;
+    if (!HasAuthority() || bPlayerDown || ChangeData.NewValue >= ChangeData.OldValue) return;
+    if (ChangeData.NewValue > 0.f)
+    {
+        BeginPlayerHitStun(PlayerHitStunDuration);
+        BeginTemporaryInvulnerability(PostHitInvulnerabilityDuration);
+        return;
+    }
     bPlayerDown = true;
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Downed")));
@@ -147,16 +153,14 @@ void ACVADCharacter::ApplyDownedState()
         GetWorldTimerManager().ClearTimer(SprintDrainTimer);
     }
     ApplySprintSpeed();
-    if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+    if (bPlayerDown)
     {
-        if (bPlayerDown) Movement->DisableMovement();
-        else if (Movement->MovementMode == MOVE_None) Movement->SetMovementMode(MOVE_Walking);
+        bPlayerHitStunned = false;
+        GetWorldTimerManager().ClearTimer(PlayerHitStunTimer);
+        if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+            ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.HitStunned")));
     }
-    if (AController* OwningController = GetController())
-    {
-        OwningController->SetIgnoreMoveInput(bPlayerDown);
-        OwningController->SetIgnoreLookInput(false);
-    }
+    ApplyPlayerControlState();
     if (bPlayerDown)
     {
         bCombatInputLocked = false;
@@ -166,8 +170,74 @@ void ACVADCharacter::ApplyDownedState()
     }
 }
 
+void ACVADCharacter::BeginPlayerHitStun(float Duration)
+{
+    if (!HasAuthority() || bPlayerDown || Duration <= 0.f) return;
+    bPlayerHitStunned = true;
+    if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+        ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.HitStunned")));
+    bSprinting = false;
+    GetWorldTimerManager().ClearTimer(SprintDrainTimer);
+    BufferedCombatInput = INDEX_NONE;
+    PendingActionAnimation = nullptr;
+    if (bActionAnimationPlaying) HandleActionAnimationFinished();
+
+    AActor* NearestEnemy = nullptr;
+    float BestSq = TNumericLimits<float>::Max();
+    for (TActorIterator<ACVADEnemyCharacter> It(GetWorld()); It; ++It)
+    {
+        const float Sq = FVector::DistSquared2D(GetActorLocation(), It->GetActorLocation());
+        if (Sq < BestSq) { BestSq = Sq; NearestEnemy = *It; }
+    }
+    if (NearestEnemy)
+    {
+        const FVector Away = (GetActorLocation() - NearestEnemy->GetActorLocation()).GetSafeNormal2D();
+        LaunchCharacter(Away * PlayerHitImpulse + FVector(0.f, 0.f, 70.f), true, true);
+    }
+    ApplyPlayerControlState();
+    OnPlayerHitStunChanged(true);
+    GetWorldTimerManager().ClearTimer(PlayerHitStunTimer);
+    GetWorldTimerManager().SetTimer(PlayerHitStunTimer, this, &ThisClass::EndPlayerHitStun, Duration, false);
+    ForceNetUpdate();
+}
+
+void ACVADCharacter::EndPlayerHitStun()
+{
+    if (!HasAuthority()) return;
+    bPlayerHitStunned = false;
+    if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
+        ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.HitStunned")));
+    ApplyPlayerControlState();
+    OnPlayerHitStunChanged(false);
+    ForceNetUpdate();
+}
+
+void ACVADCharacter::OnRep_PlayerHitStunned()
+{
+    ApplyPlayerControlState();
+    OnPlayerHitStunChanged(bPlayerHitStunned);
+}
+
+void ACVADCharacter::ApplyPlayerControlState()
+{
+    const bool bLocked = bPlayerDown || bPlayerHitStunned;
+    if (UCharacterMovementComponent* Movement = GetCharacterMovement())
+    {
+        if (bLocked) Movement->DisableMovement();
+        else if (Movement->MovementMode == MOVE_None) Movement->SetMovementMode(MOVE_Walking);
+    }
+    if (AController* OwningController = GetController())
+    {
+        OwningController->SetIgnoreMoveInput(bLocked);
+        OwningController->SetIgnoreLookInput(false);
+    }
+}
+
 void ACVADCharacter::ServerTryReviveNearbyPlayer_Implementation()
 {
+    if (bPlayerDown || bPlayerHitStunned) { UE_LOG(LogCVADAbilityInput,Warning,TEXT("Revive rejected: reviver is down or stunned")); return; }
+    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+        if (It->BattlePhase==ECVADBattlePhase::Results) { UE_LOG(LogCVADAbilityInput,Warning,TEXT("Revive rejected: battle already ended")); return; }
     ACVADCharacter* Best = nullptr;
     float BestSq = FMath::Square(275.f);
     for (TActorIterator<ACVADCharacter> It(GetWorld()); It; ++It)
@@ -176,7 +246,8 @@ void ACVADCharacter::ServerTryReviveNearbyPlayer_Implementation()
         const float DistanceSq = FVector::DistSquared(GetActorLocation(), It->GetActorLocation());
         if (DistanceSq < BestSq) { BestSq = DistanceSq; Best = *It; }
     }
-    if (Best) Best->RevivePlayer(0.5f);
+    if (Best) { UE_LOG(LogCVADAbilityInput,Log,TEXT("Revive requested Reviver=%s Target=%s"),*GetName(),*GetNameSafe(Best)); Best->RevivePlayer(0.5f); }
+    else UE_LOG(LogCVADAbilityInput,Log,TEXT("Revive requested but no downed player was within range"));
 }
 
 void ACVADCharacter::RevivePlayer(float HealthPercent)
@@ -229,7 +300,7 @@ void ACVADCharacter::GrantDefaultAbilities()
 
 void ACVADCharacter::ActivateCombatInput(ECVADAbilityInput Input)
 {
-    if (bPlayerDown)
+    if (bPlayerDown || bPlayerHitStunned)
     {
         UE_LOG(LogCVADAbilityInput, Verbose, TEXT("Combat input ignored while downed"));
         return;
@@ -240,8 +311,17 @@ void ACVADCharacter::ActivateCombatInput(ECVADAbilityInput Input)
     }
     if (bCombatInputLocked)
     {
-        if (BufferedCombatInput == INDEX_NONE) BufferedCombatInput = static_cast<int32>(Input);
-        UE_LOG(LogCVADAbilityInput, Log, TEXT("Combat input buffered Slot=%d"), static_cast<int32>(Input));
+        if (BufferedCombatInput == INDEX_NONE)
+        {
+            BufferedCombatInput = static_cast<int32>(Input);
+            UE_LOG(LogCVADAbilityInput, Log, TEXT("Combat input buffered Slot=%d Window=%s"),
+                static_cast<int32>(Input), bComboInputWindowOpen ? TEXT("open") : TEXT("early"));
+        }
+        else
+        {
+            UE_LOG(LogCVADAbilityInput, Verbose, TEXT("Combat input ignored: buffer already occupied Slot=%d"),
+                BufferedCombatInput);
+        }
         return;
     }
     UAbilitySystemComponent* AbilitySystem = GetAbilitySystemComponent();
@@ -380,6 +460,7 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
     // stance-specific state machines continue evaluating underneath the action animation.
     RestoreLocomotionAnimation();
     bActionAnimationPlaying = true;
+    bComboInputWindowOpen = false;
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
     GetWorldTimerManager().ClearTimer(ActionAnimationTimer);
@@ -406,6 +487,9 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
         ActionInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
     }
     const float Duration = FMath::Max(0.05f, DynamicMontage->GetPlayLength());
+    GetWorldTimerManager().ClearTimer(ComboWindowTimer);
+    GetWorldTimerManager().SetTimer(ComboWindowTimer, this, &ThisClass::OpenComboInputWindow,
+        FMath::Clamp(Duration * ComboWindowStartNormalized, 0.05f, Duration - 0.01f), false);
     if (HasAuthority() && bPendingAttackDamage)
     {
         GetWorldTimerManager().ClearTimer(AttackDamageTimer);
@@ -418,11 +502,35 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
         *GetNameSafe(Animation), *CombatAnimationSlot.ToString(), Duration);
 }
 
+void ACVADCharacter::OpenComboInputWindow()
+{
+    if (!bActionAnimationPlaying) return;
+    bComboInputWindowOpen = true;
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("Combo input window opened BufferedSlot=%d"), BufferedCombatInput);
+}
+
 void ACVADCharacter::HandleActionAnimationFinished()
 {
+    // Anim notifies execute while USkeletalMeshComponent is still inside PostAnimEvaluation.
+    // Starting another montage or changing the AnimInstance there recurses into evaluation and
+    // triggers SkeletalMeshComponent's !bPostEvaluatingAnimation assertion. Always leave that
+    // critical section first, including when this function is reached by the safety timer.
+    if (!bActionAnimationPlaying || !GetWorld()) return;
+    if (!GetWorldTimerManager().IsTimerActive(DeferredActionFinishTimer))
+    {
+        DeferredActionFinishTimer = GetWorldTimerManager().SetTimerForNextTick(
+            FTimerDelegate::CreateUObject(this, &ThisClass::FinishActionAnimationDeferred));
+    }
+}
+
+void ACVADCharacter::FinishActionAnimationDeferred()
+{
+    DeferredActionFinishTimer.Invalidate();
     if (!bActionAnimationPlaying) return;
     GetWorldTimerManager().ClearTimer(ActionAnimationTimer);
     GetWorldTimerManager().ClearTimer(AttackDamageTimer);
+    GetWorldTimerManager().ClearTimer(ComboWindowTimer);
+    bComboInputWindowOpen = false;
     bActionAnimationPlaying = false;
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
@@ -502,6 +610,7 @@ void ACVADCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACVADCharacter, bFlyingSwordMode);
     DOREPLIFETIME(ACVADCharacter, bPlayerDown);
+    DOREPLIFETIME(ACVADCharacter, bPlayerHitStunned);
     DOREPLIFETIME(ACVADCharacter, bSprinting);
 }
 

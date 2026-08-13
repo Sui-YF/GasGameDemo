@@ -37,6 +37,7 @@ public:
     UFUNCTION(BlueprintPure, Category="Combat|Stance") bool IsFlyingSwordMode() const { return bFlyingSwordMode; }
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat|Stance") void ToggleFlyingSwordMode();
     UFUNCTION(BlueprintPure, Category="Revive") bool IsPlayerDown() const { return bPlayerDown; }
+    UFUNCTION(BlueprintPure, Category="Combat") bool IsPlayerHitStunned() const { return bPlayerHitStunned; }
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Revive") void RevivePlayer(float HealthPercent = 0.5f);
     UFUNCTION(Server, Reliable) void ServerTryReviveNearbyPlayer();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginTemporaryInvulnerability(float Duration);
@@ -54,10 +55,22 @@ protected:
     void PlayActionAnimationLocal(UAnimSequenceBase* Animation);
     void RestoreLocomotionAnimation();
     void StartActionAnimation(UAnimSequenceBase* Animation);
+    void FinishActionAnimationDeferred();
+    void OpenComboInputWindow();
     void HandlePlayerHealthChanged(const FOnAttributeChangeData& ChangeData);
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_PlayerDown, Category="Revive") bool bPlayerDown = false;
     UFUNCTION() void OnRep_PlayerDown();
     void ApplyDownedState();
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_PlayerHitStunned, Category="Combat") bool bPlayerHitStunned = false;
+    UFUNCTION() void OnRep_PlayerHitStunned();
+    UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnPlayerHitStunChanged(bool bNewHitStunned);
+    void BeginPlayerHitStun(float Duration);
+    void EndPlayerHitStun();
+    void ApplyPlayerControlState();
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0")) float PlayerHitStunDuration = 0.22f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0")) float PlayerHitImpulse = 260.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0")) float PostHitInvulnerabilityDuration = 0.18f;
+    FTimerHandle PlayerHitStunTimer;
     UFUNCTION(Server, Reliable) void ServerSetSprinting(bool bNewSprinting);
     UFUNCTION() void OnRep_Sprinting();
     void ApplySprintSpeed();
@@ -69,11 +82,14 @@ protected:
     FTimerHandle SprintDrainTimer;
 
     FTimerHandle ActionAnimationTimer;
+    FTimerHandle DeferredActionFinishTimer;
     FTimerHandle AttackDamageTimer;
+    FTimerHandle ComboWindowTimer;
     FTimerHandle InvulnerabilityTimer;
     void EndTemporaryInvulnerability();
     UPROPERTY(Transient) TObjectPtr<UAnimSequenceBase> PendingActionAnimation;
     bool bActionAnimationPlaying = false;
+    bool bComboInputWindowOpen = false;
     bool bCombatInputLocked = false;
     int32 BufferedCombatInput = INDEX_NONE;
     float PendingAttackDamage = 0.f;
@@ -116,4 +132,5 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat") FName CombatAnimationSlot = TEXT("UpperBody");
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat", meta=(ClampMin="0.0")) float CombatBlendInTime = 0.08f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat", meta=(ClampMin="0.0")) float CombatBlendOutTime = 0.12f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Animation|Combat", meta=(ClampMin="0.1", ClampMax="0.95")) float ComboWindowStartNormalized = 0.55f;
 };

@@ -22,9 +22,26 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Boss") int32 GetBossPhase() const { return BossPhase; }
     UFUNCTION(BlueprintPure, Category="Boss") bool IsBoss() const { return bIsBoss; }
+    UFUNCTION(BlueprintPure, Category="Boss") int32 GetBossRole() const { return BossRole; }
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss") void SetBossRole(int32 NewRole);
+    UFUNCTION(BlueprintPure, Category="Combat") bool IsHitStunned() const { return bHitStunned; }
+    UFUNCTION(BlueprintPure, Category="Combat") bool IsAttackTelegraphActive() const { return bAttackTelegraphActive; }
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginAttackTelegraph(const FVector& Center, float Radius, float Duration);
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginShapedAttackTelegraph(const FVector& Center, float Radius, float Duration, int32 Shape, const FVector& Direction);
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void EndAttackTelegraph();
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss|Animation") void PlayBossAttackAnimation();
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnEnemyDamaged(float DamageAmount);
+    UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnHitStunChanged(bool bNewHitStunned);
+    UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnAttackTelegraphChanged(bool bActive, FVector Center, float Radius, float Duration);
 
 protected:
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Boss|Angel") TObjectPtr<class USkeletalMeshComponent> AngelWingLeft;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Boss|Angel") TObjectPtr<class USkeletalMeshComponent> AngelWingRight;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Boss|Angel") TObjectPtr<class USkeletalMeshComponent> AngelSword;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> SwordBossAttack;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> WingBossAttack;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> CasterBossAttack;
+    UFUNCTION(NetMulticast, Unreliable) void MulticastPlayBossAttack(int32 AttackRole);
     /** Rendering/network distance only. The actor is never hidden or destroyed by this setting. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="1000.0"))
     float VisualCullDistance = 30000.f;
@@ -32,10 +49,31 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="1000.0"))
     float NetworkCullDistance = 50000.f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat") float HitReactionImpulse = 420.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0")) float MinionHitStunDuration = 0.28f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss", meta=(ClampMin="0.0")) float BossPhaseHitStunDuration = 0.55f;
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HitStunned, Category="Combat") bool bHitStunned = false;
+    UFUNCTION() void OnRep_HitStunned();
+    void BeginHitStun(float Duration);
+    void EndHitStun();
+    FTimerHandle HitStunTimer;
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_AttackTelegraph, Category="Combat") bool bAttackTelegraphActive = false;
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Combat") FVector_NetQuantize AttackTelegraphCenter;
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Combat") float AttackTelegraphRadius = 0.f;
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Combat") float AttackTelegraphDuration = 0.f;
+    /** 0 circle, 1 forward cone, 2 line corridor. */
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Combat") int32 AttackTelegraphShape = 0;
+    UPROPERTY(BlueprintReadOnly, Replicated, Category="Combat") FVector_NetQuantizeNormal AttackTelegraphDirection = FVector::ForwardVector;
+    UFUNCTION() void OnRep_AttackTelegraph();
+    void DrawAttackTelegraphPlaceholder() const;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Balance") FName BalanceRowName = TEXT("Minion");
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss") bool bIsBoss = false;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_BossPhase, Category="Boss") int32 BossPhase = 1;
+    /** 0 Sword, 1 Wing Vanguard, 2 Celestial Caster. */
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_BossRole, Category="Boss") int32 BossRole = 0;
+    UFUNCTION() void OnRep_BossRole();
+    void ApplyBossRoleVisuals();
+    UFUNCTION(BlueprintImplementableEvent, Category="Boss") void OnBossRoleChanged(int32 NewRole);
     UFUNCTION() void OnRep_BossPhase();
     UFUNCTION(BlueprintImplementableEvent, Category="Boss") void OnBossPhaseChanged(int32 NewPhase);
     void EvaluateBossPhase(float CurrentHealth);

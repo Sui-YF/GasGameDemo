@@ -47,6 +47,8 @@ for row_name, display, desc, slot_enum, slot_csv, anim_path, damage, distance, r
     cdo.set_editor_property("hit_multiple_targets", is_aoe)
     if row_name == "FlyingSword2":
         cdo.set_editor_property("auto_target_nearest", True)
+        cdo.set_editor_property("spawn_homing_sword", True)
+        cdo.set_editor_property("homing_sword_count", 2)
     unreal.EditorAssetLibrary.save_loaded_asset(bp)
     if row_name in ("SwordAttack2", "SwordAttack3", "SwordAttack4"):
         continue

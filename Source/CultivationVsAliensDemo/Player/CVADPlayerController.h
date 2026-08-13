@@ -19,6 +19,7 @@ public:
     virtual void BeginPlay() override;
     virtual void PlayerTick(float DeltaTime) override;
     virtual void SetupInputComponent() override;
+    virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
     /** Blueprint/UI button entry point: enables cursor-directed character facing. */
     UFUNCTION(BlueprintCallable, Category="Input|Facing")
@@ -26,13 +27,26 @@ public:
 
     UFUNCTION(BlueprintPure, Category="Input|Facing")
     bool IsMouseFacingEnabled() const { return bMouseFacingEnabled; }
+    UFUNCTION(BlueprintCallable, Category="Input|Look") void SetMouseSensitivity(float NewSensitivity);
+    UFUNCTION(BlueprintPure, Category="Input|Look") float GetMouseSensitivity() const { return MouseSensitivity; }
 
     /** Restarts the battle for every connected player. Clients forward the request to the listen server. */
     UFUNCTION(BlueprintCallable, Category="Battle") void RequestRestartBattle();
     UFUNCTION(BlueprintCallable, Category="Menu") void RequestReturnToMainMenu();
+    UFUNCTION(BlueprintCallable, Category="Lobby") void RequestStartLobbyGame();
+    UFUNCTION(BlueprintPure, Category="Lobby") bool IsLobbyHost() const;
     UFUNCTION(BlueprintCallable, Category="Input|Rebinding") bool RebindAction(FName ActionName, FKey NewKey);
     UFUNCTION(BlueprintCallable, Category="Input|Rebinding") void ResetInputBindings();
     UFUNCTION(BlueprintPure, Category="Input|Rebinding") FKey GetBoundKey(FName ActionName) const;
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSettingsScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSkillTreeScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowInventoryScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSaveSlotsScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowNameEntryScreen();
+    void SetPendingMenuAction(int32 Action, const FString& Address = FString());
+    void ContinuePendingMenuAction();
+    float ConsumeUnsavedPlayTime();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void CloseTopScreen();
 
 protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Input") TObjectPtr<UInputMappingContext> PlayerMappingContext;
@@ -72,15 +86,23 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> PauseWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> ResultWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> MainMenuWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> LobbyWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SettingsWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SkillTreeWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SaveSlotsWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> NameEntryWidgetClass;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> HUDWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> InventoryWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> PauseWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> ResultWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> MainMenuWidget;
+    UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> LobbyWidget;
+    UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> ActiveModalWidget;
     bool bResultShown = false;
 
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input|Facing") bool bMouseFacingEnabled = true;
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input|Facing", meta=(ClampMin="0.0")) float FacingInterpSpeed = 18.f;
+    UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Input|Look", meta=(ClampMin="0.1", ClampMax="3.0")) float MouseSensitivity = 1.f;
 
     /** Initial camera pitch is always CameraPitchMin. Vertical mouse look is clamped to this range. */
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Camera", meta=(ClampMin="-89.0", ClampMax="89.0")) float CameraPitchMin = -75.f;
@@ -97,5 +119,12 @@ private:
     UFUNCTION(Server, Unreliable) void ServerSetFacingYaw(float Yaw);
     UFUNCTION(Server, Reliable) void ServerRestartBattle();
     UFUNCTION(Server, Reliable) void ServerReturnToMainMenu();
+    UFUNCTION(Server, Reliable) void ServerStartLobbyGame();
     void RestartBattleAuthority();
+    void ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetClass, int32 ZOrder = 40);
+    void HandleNetworkFailure(UWorld* FailedWorld, class UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
+    FDelegateHandle NetworkFailureHandle;
+    int32 PendingMenuAction = 0;
+    FString PendingServerAddress;
+    float LastProfileSaveWorldTime = 0.f;
 };

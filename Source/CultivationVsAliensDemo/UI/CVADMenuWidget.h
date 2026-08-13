@@ -13,6 +13,7 @@ class CULTIVATIONVSALIENSDEMO_API UCVADMenuWidget : public UCVADUserWidget
     GENERATED_BODY()
 public:
     virtual void NativeConstruct() override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     UFUNCTION(BlueprintCallable, Category="Menu") void StartSinglePlayer();
     UFUNCTION(BlueprintCallable, Category="Menu") void HostListenServer();
     UFUNCTION(BlueprintCallable, Category="Menu") void JoinServer(const FString& Address);
@@ -29,6 +30,11 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_JoinGame;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_LoadGame;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Quit;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Settings;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Ready;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_StartGame;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_LeaveLobby;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_CopyAddress;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Retry;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_ReturnLobby;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_ReturnMainMenu;
@@ -46,6 +52,16 @@ private:
     UFUNCTION() void HandleJoinClicked();
     UFUNCTION() void HandleLoadClicked();
     UFUNCTION() void HandleQuitClicked();
+    UFUNCTION() void HandleSettingsClicked();
+    UFUNCTION() void HandleReadyClicked();
+    UFUNCTION() void HandleStartGameClicked();
+    UFUNCTION() void HandleLeaveLobbyClicked();
+    UFUNCTION() void HandleCopyAddressClicked();
+    void RefreshLobbyDisplay();
+    FString GetConfiguredPlayerName() const;
+    FString BuildPlayerTravelOptions(const FString& BaseOptions = TEXT("")) const;
+    bool EnsureConfiguredPlayerName(int32 PendingAction, const FString& Address = FString());
+    float LobbyRefreshAccumulator = 0.f;
     UFUNCTION() void HandleRetryClicked();
     UFUNCTION() void HandleReturnClicked();
 };

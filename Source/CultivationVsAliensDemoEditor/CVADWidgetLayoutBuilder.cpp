@@ -22,6 +22,8 @@
 #include "AnimGraphNode_BlendSpacePlayer.h"
 #include "AnimGraphNode_Root.h"
 #include "AnimGraphNode_Slot.h"
+#include "AnimGraphNode_LayeredBoneBlend.h"
+#include "Animation/Skeleton.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphSchema.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -41,9 +43,9 @@ namespace
 
             for (UEdGraphNode* Existing : Graph->Nodes)
             {
-                if (const UAnimGraphNode_Slot* ExistingSlot = Cast<UAnimGraphNode_Slot>(Existing))
+                if (const UAnimGraphNode_LayeredBoneBlend* ExistingBlend = Cast<UAnimGraphNode_LayeredBoneBlend>(Existing))
                 {
-                    if (ExistingSlot->Node.SlotName == TEXT("UpperBody")) return true;
+                    if (ExistingBlend->Node.LayerSetup.Num() > 0) return true;
                 }
             }
 
@@ -53,15 +55,34 @@ namespace
                 if (Pin && Pin->Direction == EGPD_Input) { RootInput = Pin; break; }
             }
             if (!RootInput || RootInput->LinkedTo.Num() != 1) continue;
-            UEdGraphPin* LocomotionOutput = RootInput->LinkedTo[0];
+            UAnimGraphNode_Slot* Slot = nullptr;
+            for (UEdGraphNode* Existing : Graph->Nodes)
+            {
+                UAnimGraphNode_Slot* Candidate = Cast<UAnimGraphNode_Slot>(Existing);
+                if (Candidate && Candidate->Node.SlotName == TEXT("UpperBody")) { Slot = Candidate; break; }
+            }
 
-            FGraphNodeCreator<UAnimGraphNode_Slot> Creator(*Graph);
-            UAnimGraphNode_Slot* Slot = Creator.CreateNode();
-            Slot->Node.SlotName = TEXT("UpperBody");
-            Slot->Node.bAlwaysUpdateSourcePose = true;
-            Slot->NodePosX = Roots[0]->NodePosX - 240;
-            Slot->NodePosY = Roots[0]->NodePosY;
-            Creator.Finalize();
+            UEdGraphPin* LocomotionOutput = nullptr;
+            if (Slot)
+            {
+                for (UEdGraphPin* Pin : Slot->Pins)
+                {
+                    if (Pin && Pin->Direction == EGPD_Input && Pin->LinkedTo.Num() == 1)
+                    { LocomotionOutput = Pin->LinkedTo[0]; break; }
+                }
+            }
+            else
+            {
+                LocomotionOutput = RootInput->LinkedTo[0];
+                FGraphNodeCreator<UAnimGraphNode_Slot> Creator(*Graph);
+                Slot = Creator.CreateNode();
+                Slot->Node.SlotName = TEXT("UpperBody");
+                Slot->Node.bAlwaysUpdateSourcePose = true;
+                Slot->NodePosX = Roots[0]->NodePosX - 480;
+                Slot->NodePosY = Roots[0]->NodePosY + 140;
+                Creator.Finalize();
+            }
+            if (!LocomotionOutput) return false;
 
             UEdGraphPin* SlotInput = nullptr;
             UEdGraphPin* SlotOutput = nullptr;
@@ -72,10 +93,52 @@ namespace
                 if (Pin->Direction == EGPD_Output && !SlotOutput) SlotOutput = Pin;
             }
             if (!SlotInput || !SlotOutput) return false;
-            RootInput->BreakAllPinLinks();
             const UEdGraphSchema* Schema = Graph->GetSchema();
-            if (!Schema->TryCreateConnection(LocomotionOutput, SlotInput) ||
-                !Schema->TryCreateConnection(SlotOutput, RootInput)) return false;
+            if (SlotInput->LinkedTo.Num() == 0 && !Schema->TryCreateConnection(LocomotionOutput, SlotInput)) return false;
+
+            FName UpperBodyBone = NAME_None;
+            if (Blueprint->TargetSkeleton)
+            {
+                const FReferenceSkeleton& RefSkeleton = Blueprint->TargetSkeleton->GetReferenceSkeleton();
+                for (const FName Candidate : {FName(TEXT("spine_01")), FName(TEXT("Spine1")),
+                    FName(TEXT("spine_1")), FName(TEXT("spine")), FName(TEXT("Spine"))})
+                {
+                    if (RefSkeleton.FindBoneIndex(Candidate) != INDEX_NONE) { UpperBodyBone = Candidate; break; }
+                }
+            }
+            if (UpperBodyBone.IsNone())
+            {
+                UE_LOG(LogTemp, Error, TEXT("CVAD could not find an upper-body spine bone for %s"), *GetNameSafe(Blueprint));
+                return false;
+            }
+
+            FGraphNodeCreator<UAnimGraphNode_LayeredBoneBlend> BlendCreator(*Graph);
+            UAnimGraphNode_LayeredBoneBlend* LayeredBlend = BlendCreator.CreateNode();
+            LayeredBlend->Node.AddPose();
+            LayeredBlend->Node.LayerSetup[0].BranchFilters.Add({UpperBodyBone, 0});
+            LayeredBlend->Node.bMeshSpaceRotationBlend = true;
+            LayeredBlend->Node.bBlendRootMotionBasedOnRootBone = true;
+            LayeredBlend->NodePosX = Roots[0]->NodePosX - 240;
+            LayeredBlend->NodePosY = Roots[0]->NodePosY;
+            BlendCreator.Finalize();
+
+            UEdGraphPin* BasePosePin = LayeredBlend->FindPin(TEXT("BasePose"));
+            UEdGraphPin* BlendPosePin = nullptr;
+            UEdGraphPin* BlendOutput = nullptr;
+            for (UEdGraphPin* Pin : LayeredBlend->Pins)
+            {
+                if (!Pin) continue;
+                if (Pin->Direction == EGPD_Output && !BlendOutput) BlendOutput = Pin;
+                if (Pin->Direction == EGPD_Input && Pin != BasePosePin && Pin->PinName.ToString().Contains(TEXT("BlendPoses")))
+                    BlendPosePin = Pin;
+            }
+            if (!BasePosePin || !BlendPosePin || !BlendOutput) return false;
+            RootInput->BreakAllPinLinks();
+            if (!Schema->TryCreateConnection(LocomotionOutput, BasePosePin) ||
+                !Schema->TryCreateConnection(SlotOutput, BlendPosePin) ||
+                !Schema->TryCreateConnection(BlendOutput, RootInput)) return false;
+            UE_LOG(LogTemp, Display, TEXT("CVAD inserted UpperBody layered blend at bone %s in %s"),
+                *UpperBodyBone.ToString(), *GetNameSafe(Blueprint));
             return true;
         }
         return false;
@@ -176,7 +239,7 @@ namespace
         UProgressBar* Experience = Tree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("ExperienceBar"));
         Experience->bIsVariable = true; Stack->AddChildToVerticalBox(Experience);
         AddText(Tree, Stack, TEXT("SkillPointsText"), TEXT("技能点 0"), 16)->bIsVariable = true;
-        AddText(Tree, Stack, TEXT("BossNameText"), TEXT("外星机械统领"), 20)->bIsVariable = true;
+        AddText(Tree, Stack, TEXT("BossNameText"), TEXT("天穹三使 · 剑士 / 翼卫 / 天术师"), 20)->bIsVariable = true;
         UProgressBar* BossHealth = Tree->ConstructWidget<UProgressBar>(UProgressBar::StaticClass(), TEXT("BossHealthBar"));
         BossHealth->bIsVariable = true; Stack->AddChildToVerticalBox(BossHealth);
         AddText(Tree, Stack, TEXT("ResultStateText"), TEXT(""), 28)->bIsVariable = true;
@@ -231,10 +294,11 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
         TEXT("/Game/LanFang/Animations/RootMotion/FlyingSwords/Anim_FS_Run.Anim_FS_Run"));
     if (!SourceBlueprint || !SourceBlend || !Idle || !Walk || !Run) return false;
 
-    UPackage* NormalPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_Normal"));
-    UAnimBlueprint* NormalBlueprint = FindObject<UAnimBlueprint>(NormalPackage, TEXT("ABP_LanFang_Normal"));
+    UAnimBlueprint* NormalBlueprint = LoadObject<UAnimBlueprint>(nullptr,
+        TEXT("/Game/CVAD/Animations/ABP_LanFang_Normal.ABP_LanFang_Normal"));
     if (!NormalBlueprint)
     {
+        UPackage* NormalPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_Normal"));
         NormalBlueprint = Cast<UAnimBlueprint>(StaticDuplicateObject(SourceBlueprint, NormalPackage, TEXT("ABP_LanFang_Normal")));
         FAssetRegistryModule::AssetCreated(NormalBlueprint);
     }
@@ -254,10 +318,11 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
     FlyingBlend->ReplaceSampleAnimation(2, Run);
     FlyingBlend->ValidateSampleData();
 
-    UPackage* BlueprintPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSword"));
-    UAnimBlueprint* FlyingBlueprint = FindObject<UAnimBlueprint>(BlueprintPackage, TEXT("ABP_LanFang_FlyingSword"));
+    UAnimBlueprint* FlyingBlueprint = LoadObject<UAnimBlueprint>(nullptr,
+        TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSword.ABP_LanFang_FlyingSword"));
     if (!FlyingBlueprint)
     {
+        UPackage* BlueprintPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSword"));
         FlyingBlueprint = Cast<UAnimBlueprint>(StaticDuplicateObject(SourceBlueprint, BlueprintPackage, TEXT("ABP_LanFang_FlyingSword")));
         FAssetRegistryModule::AssetCreated(FlyingBlueprint);
     }
@@ -296,9 +361,10 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
         {TEXT("WBP_MainMenu"), {TEXT("Button_SinglePlayer"),TEXT("Button_HostListenServer"),TEXT("Button_JoinGame"),TEXT("Button_LoadGame"),TEXT("Button_Settings"),TEXT("Button_Quit")}, {TEXT("Text_Title"),TEXT("Text_Version"),TEXT("Text_Status")}},
         {TEXT("WBP_Lobby"), {TEXT("Button_Ready"),TEXT("Button_StartGame"),TEXT("Button_LeaveLobby"),TEXT("Button_CopyAddress")}, {TEXT("Text_LobbyTitle"),TEXT("Text_HostName"),TEXT("Text_Player1"),TEXT("Text_Player2"),TEXT("Text_ConnectionStatus")}, {}, {}, {}, {TEXT("Input_ServerAddress")}},
         {TEXT("WBP_Pause"), {TEXT("Button_Resume"),TEXT("Button_Inventory"),TEXT("Button_SkillTree"),TEXT("Button_Settings"),TEXT("Button_SaveGame"),TEXT("Button_LoadGame"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_PauseTitle")}},
-        {TEXT("WBP_Settings"), {TEXT("Button_RebindMoveForward"),TEXT("Button_RebindMoveBack"),TEXT("Button_RebindMoveLeft"),TEXT("Button_RebindMoveRight"),TEXT("Button_RebindJump"),TEXT("Button_RebindLightAttack"),TEXT("Button_RebindHeavyAttack"),TEXT("Button_RebindDodge"),TEXT("Button_RebindFlyingSword"),TEXT("Button_RebindSwitchStance"),TEXT("Button_ResetBindings"),TEXT("Button_Apply"),TEXT("Button_Cancel")}, {TEXT("Text_SettingsTitle"),TEXT("Text_RebindPrompt")}, {TEXT("Slider_MasterVolume"),TEXT("Slider_MusicVolume"),TEXT("Slider_SFXVolume"),TEXT("Slider_MouseSensitivity"),TEXT("Slider_ResolutionScale")}, {TEXT("Check_Fullscreen"),TEXT("Check_VSync"),TEXT("Check_MouseFacing")}, {TEXT("Combo_Resolution"),TEXT("Combo_Quality"),TEXT("Combo_Language")}},
+        {TEXT("WBP_Settings"), {TEXT("Button_RebindMoveForward"),TEXT("Button_RebindMoveBack"),TEXT("Button_RebindMoveLeft"),TEXT("Button_RebindMoveRight"),TEXT("Button_RebindJump"),TEXT("Button_RebindLightAttack"),TEXT("Button_RebindHeavyAttack"),TEXT("Button_RebindDodge"),TEXT("Button_RebindFlyingSword"),TEXT("Button_RebindSwitchStance"),TEXT("Button_ResetBindings"),TEXT("Button_Apply"),TEXT("Button_Cancel")}, {TEXT("Text_SettingsTitle"),TEXT("Text_RebindPrompt"),TEXT("Text_NameError")}, {TEXT("Slider_MasterVolume"),TEXT("Slider_MusicVolume"),TEXT("Slider_SFXVolume"),TEXT("Slider_MouseSensitivity"),TEXT("Slider_ResolutionScale")}, {TEXT("Check_Fullscreen"),TEXT("Check_VSync"),TEXT("Check_MouseFacing")}, {TEXT("Combo_Resolution"),TEXT("Combo_Quality"),TEXT("Combo_Language")}, {TEXT("Input_PlayerName")}},
         {TEXT("WBP_Result"), {TEXT("Button_Retry"),TEXT("Button_ReturnLobby"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_ResultTitle"),TEXT("Text_ClearTime"),TEXT("Text_Defeats"),TEXT("Text_BossResult"),TEXT("Text_ExperienceEarned")}},
         {TEXT("WBP_NameEntry"), {TEXT("Button_ConfirmName"),TEXT("Button_CancelName")}, {TEXT("Text_NameTitle"),TEXT("Text_NameError")}, {}, {}, {}, {TEXT("Input_PlayerName")}},
+        {TEXT("WBP_SaveSlots"), {TEXT("Button_SaveSlot0"),TEXT("Button_LoadSlot0"),TEXT("Button_DeleteSlot0"),TEXT("Button_SaveSlot1"),TEXT("Button_LoadSlot1"),TEXT("Button_DeleteSlot1"),TEXT("Button_SaveSlot2"),TEXT("Button_LoadSlot2"),TEXT("Button_DeleteSlot2"),TEXT("Button_Close")}, {TEXT("Text_SaveTitle"),TEXT("Text_Slot0"),TEXT("Text_Slot1"),TEXT("Text_Slot2")}},
         {TEXT("WBP_SkillTree"), {TEXT("Button_SwordAttack1"),TEXT("Button_SwordAttack2"),TEXT("Button_SwordAttack3"),TEXT("Button_SwordAttack4"),TEXT("Button_SwordAttack5"),TEXT("Button_FlyingSword1"),TEXT("Button_FlyingSword2"),TEXT("Button_FlyingSword3"),TEXT("Button_EquipSelected"),TEXT("Button_ResetSkills"),TEXT("Button_Close")}, {TEXT("Text_SkillTreeTitle"),TEXT("Text_Level"),TEXT("Text_Experience"),TEXT("Text_SkillPoints"),TEXT("Text_SelectedSkillName"),TEXT("Text_SelectedSkillDescription"),TEXT("Text_Prerequisite"),TEXT("Text_SkillCost")}},
     };
     bool bAllSucceeded = true;

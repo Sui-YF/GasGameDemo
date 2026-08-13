@@ -16,5 +16,13 @@ EBTNodeResult::Type UCVADBTTask_Combat::ExecuteTask(UBehaviorTreeComponent& Owne
 void UCVADBTTask_Combat::TickTask(UBehaviorTreeComponent& OwnerComp, uint8*, float DeltaSeconds)
 {
     ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(OwnerComp.GetAIOwner());
-    if (!AI || !AI->ExecuteCombatDecision(DeltaSeconds)) FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+    if (!AI)
+    {
+        FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
+        return;
+    }
+    // No target, hit stun and a locked boss phase are idle states, not BT
+    // failures. Keep this mandatory task alive so it resumes immediately when
+    // the replicated battle state permits combat.
+    AI->ExecuteCombatDecision(DeltaSeconds);
 }
