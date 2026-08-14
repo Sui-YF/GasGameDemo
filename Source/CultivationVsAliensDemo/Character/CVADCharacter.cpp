@@ -138,6 +138,35 @@ UAbilitySystemComponent* ACVADCharacter::GetAbilitySystemComponent() const
     return CVADPlayerState ? CVADPlayerState->GetAbilitySystemComponent() : nullptr;
 }
 
+void ACVADCharacter::ApplyAppearanceSelection(const int32 PartIndices[7])
+{
+    static const TArray<TArray<FString>> Choices={
+        {TEXT("Heads/SK_Head_A"),TEXT("Heads/SK_Head_B"),TEXT("Heads/SK_Head_C")},
+        {TEXT("Hairs/SK_Hair_A"),TEXT("Hairs/SK_Hair_ADyeing_01"),TEXT("Hairs/SK_Hair_ADyeing_02"),TEXT("Hairs/SK_Hair4MaskCloth_A")},
+        {TEXT(""),TEXT("Hats/SK_BambooHat_A"),TEXT("Hats/SK_BambooHat_B"),TEXT("Hats/SK_BambooHat_C"),TEXT("Hats/SK_Helmet_A"),TEXT("Hats/SK_Helmet_B")},
+        {TEXT("TopBodies/SK_TopBody_A"),TEXT("TopBodies/SK_TopBody_B"),TEXT("TopBodies/SK_TopBody_Base"),TEXT("TopBodies/SK_TopBody_C"),TEXT("TopBodies/SK_TopBody_D")},
+        {TEXT("Hands/SK_Hands"),TEXT("Hands/SK_Hand_L"),TEXT("Hands/SK_Hand_R")},
+        {TEXT("BotBodies/SK_BotBody_A"),TEXT("BotBodies/SK_BotBody_B"),TEXT("BotBodies/SK_BotBody_Base")},
+        {TEXT("Shoes/SK_Boots_A"),TEXT("Shoes/SK_Boots_B"),TEXT("Shoes/SK_Feet"),TEXT("Shoes/SK_Shoes_A"),TEXT("Shoes/SK_Shoes_B"),TEXT("Shoes/SK_Shoes_C"),TEXT("Shoes/SK_Shoes_D")}};
+    USkeletalMeshComponent* Parts[]={HeadMesh,HairMesh,HatMesh,UpperBodyMesh,HandsMesh,LowerBodyMesh,FeetMesh};
+    for(int32 Part=0;Part<7;++Part)
+    {
+        const int32 Index=FMath::Clamp(PartIndices[Part],0,Choices[Part].Num()-1);
+        const FString& Relative=Choices[Part][Index];
+        USkeletalMesh* PartMesh=nullptr;
+        if(!Relative.IsEmpty())
+        {
+            const FString Asset=FString::Printf(TEXT("/Game/LanFang/Meshes/Characters/Separates/%s.%s"),*Relative,*FPaths::GetBaseFilename(Relative));
+            PartMesh=LoadObject<USkeletalMesh>(nullptr,*Asset);
+        }
+        Parts[Part]->SetSkeletalMesh(PartMesh);
+        Parts[Part]->SetLeaderPoseComponent(GetMesh());
+        Parts[Part]->SetHiddenInGame(false);
+        Parts[Part]->SetVisibility(true,true);
+    }
+    GetMesh()->SetVisibility(false,false);
+}
+
 void ACVADCharacter::PossessedBy(AController* NewController)
 {
     Super::PossessedBy(NewController);

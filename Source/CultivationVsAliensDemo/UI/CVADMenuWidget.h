@@ -34,6 +34,7 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_ChangeName;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Skills;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Outfit;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Multiplayer;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Ready;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_StartGame;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_LeaveLobby;
@@ -60,6 +61,7 @@ private:
     UFUNCTION() void HandleChangeNameClicked();
     UFUNCTION() void HandleSkillsClicked();
     UFUNCTION() void HandleOutfitClicked();
+    UFUNCTION() void HandleMultiplayerClicked();
     UFUNCTION() void HandleReadyClicked();
     UFUNCTION() void HandleStartGameClicked();
     UFUNCTION() void HandleLeaveLobbyClicked();

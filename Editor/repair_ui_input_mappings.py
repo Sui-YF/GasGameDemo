@@ -6,13 +6,16 @@ if not context: raise RuntimeError('Missing IMC_Player')
 
 expected={
     '/Game/CVAD/Input/Actions/IA_Inventory':'Tab',
-    '/Game/CVAD/Input/Actions/IA_Pause':'Escape',
+    '/Game/CVAD/Input/Actions/IA_Pause':'P',
 }
 mappings=list(context.get_editor_property('mappings'))
 for action_path,key_name in expected.items():
     action=unreal.load_asset(action_path)
     if not action: raise RuntimeError('Missing '+action_path)
     existing=[m for m in mappings if m.get_editor_property('action')==action]
+    if action.get_name() == 'IA_Pause':
+        mappings=[m for m in mappings if m.get_editor_property('action')!=action]
+        existing=[]
     if not any(m.get_editor_property('key').get_editor_property('key_name')==key_name for m in existing):
         mapping=unreal.EnhancedActionKeyMapping()
         mapping.set_editor_property('action',action)
@@ -33,3 +36,6 @@ for m in mappings:
     a=m.get_editor_property('action')
     if a and a.get_name() in ('IA_Inventory','IA_Pause'):
         unreal.log('CVAD_UI_REPAIR mapping {} -> {}'.format(a.get_name(),m.get_editor_property('key').get_editor_property('key_name')))
+
+if not unreal.CVADEditorAssetBuilder.build_all_widget_layouts():
+    raise RuntimeError('Failed to update HUD pause-key hint')

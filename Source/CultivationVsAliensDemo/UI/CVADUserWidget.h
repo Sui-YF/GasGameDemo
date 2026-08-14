@@ -6,6 +6,7 @@
 class ACVADPlayerState;
 class UCVADInventoryComponent;
 class UButton;
+class ACVADCharacter;
 
 UCLASS(Abstract, Blueprintable)
 class CULTIVATIONVSALIENSDEMO_API UCVADUserWidget : public UUserWidget
@@ -73,8 +74,9 @@ private:
     UFUNCTION() void CaptureFlyingSword();
     UFUNCTION() void CaptureSwitchStance();
     UFUNCTION() void SaveSlot0(); UFUNCTION() void SaveSlot1(); UFUNCTION() void SaveSlot2();
-    UFUNCTION() void LoadSlot0(); UFUNCTION() void LoadSlot1(); UFUNCTION() void LoadSlot2();
-    UFUNCTION() void DeleteSlot0(); UFUNCTION() void DeleteSlot1(); UFUNCTION() void DeleteSlot2();
+    UFUNCTION() void SaveSelectedSlot();
+    UFUNCTION() void LoadSelectedSlot();
+    UFUNCTION() void DeleteSelectedSlot();
     UFUNCTION() void SelectSwordAttack1(); UFUNCTION() void SelectSwordAttack2(); UFUNCTION() void SelectSwordAttack3();
     UFUNCTION() void SelectSwordAttack4(); UFUNCTION() void SelectSwordAttack5();
     UFUNCTION() void SelectFlyingSword1(); UFUNCTION() void SelectFlyingSword2(); UFUNCTION() void SelectFlyingSword3();
@@ -84,10 +86,14 @@ private:
     void RefreshSkillDetails();
     void BeginKeyCapture(FName ActionName);
     void InitializeSettingsControls();
+    void RefreshKeyBindingLabels();
     void RefreshSaveSlotPreviews();
+    void SelectSaveSlot(int32 SlotIndex);
     void SetSaveSlotPreviewText(int32 SlotIndex, class UTextBlock* TextWidget);
     FName PendingRebindAction;
     FName SelectedSkillRow;
+    int32 SelectedSaveSlot = 0;
     int32 PreviewOutfitParts[7] = {0,0,0,0,0,0,0};
+    UPROPERTY(Transient) TObjectPtr<ACVADCharacter> OutfitPreviewCharacter;
     void ChangeOutfitPart(int32 Part,int32 Direction);
 };

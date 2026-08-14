@@ -22,6 +22,8 @@
 #include "Components/TextBlock.h"
 #include "Player/CVADPlayerController.h"
 #include "Input/Reply.h"
+#include "Components/Viewport.h"
+#include "Character/CVADCharacter.h"
 
 static const TCHAR* CVADAudioConfigSection = TEXT("CVAD.AudioSettings");
 static const TCHAR* CVADSaveConfigSection = TEXT("CVAD.SaveSlots");
@@ -38,6 +40,7 @@ void UCVADUserWidget::NativeConstruct()
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_SkillTree")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOpenSkillTreeClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Settings")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOpenSettingsClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Close")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
+    if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Back")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Cancel")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_CancelName")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_ConfirmName")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleConfirmNameClicked);
@@ -49,17 +52,24 @@ void UCVADUserWidget::NativeConstruct()
     #undef BIND_OUTFIT
     if (UButton* Button=Cast<UButton>(GetWidgetFromName(TEXT("Button_OutfitConfirm")))) Button->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleOutfitConfirm);
     if(GetClass()->GetName().Contains(TEXT("WBP_OutfitSelect")))
-    { for(int32 I=0;I<7;++I)if(GConfig)GConfig->GetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),I),PreviewOutfitParts[I],GGameUserSettingsIni); RefreshOutfitPreview(); }
+    {
+        for(int32 I=0;I<7;++I)if(GConfig)GConfig->GetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),I),PreviewOutfitParts[I],GGameUserSettingsIni);
+        if(UViewport* Preview=Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_OutfitPreview"))))
+        {
+            Preview->SetBackgroundColor(FLinearColor(0.015f,0.025f,0.05f,1.f)); Preview->SetLightIntensity(5.f); Preview->SetSkyIntensity(1.5f);
+            Preview->SetViewLocation(FVector(190.f,0.f,105.f)); Preview->SetViewRotation(FRotator(0.f,180.f,0.f));
+            OutfitPreviewCharacter=Cast<ACVADCharacter>(Preview->Spawn(ACVADCharacter::StaticClass()));
+            if(OutfitPreviewCharacter) OutfitPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
+        }
+        RefreshOutfitPreview();
+    }
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot0")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot0);
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot1);
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot2")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot2);
-    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_LoadSlot0")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::LoadSlot0);
-    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_LoadSlot1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::LoadSlot1);
-    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_LoadSlot2")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::LoadSlot2);
-    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_DeleteSlot0")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::DeleteSlot0);
-    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_DeleteSlot1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::DeleteSlot1);
-    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_DeleteSlot2")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::DeleteSlot2);
-    if (GetClass()->GetName().Contains(TEXT("WBP_SaveSlots"))) RefreshSaveSlotPreviews();
+    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSelected")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSelectedSlot);
+    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_LoadSelected")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::LoadSelectedSlot);
+    if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_DeleteSelected")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::DeleteSelectedSlot);
+    if (GetClass()->GetName().Contains(TEXT("WBP_SaveSlots"))) { SelectedSaveSlot=GetLastUsedProfileSlot(); RefreshSaveSlotPreviews(); }
     if (GetClass()->GetName().Contains(TEXT("WBP_SkillTree")))
     {
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack1);
@@ -119,6 +129,35 @@ void UCVADUserWidget::InitializeSettingsControls()
         if (USlider* W=Cast<USlider>(GetWidgetFromName(TEXT("Slider_MouseSensitivity")))) W->SetValue((PC->GetMouseSensitivity()-0.1f)/2.9f);
         if (UCheckBox* W=Cast<UCheckBox>(GetWidgetFromName(TEXT("Check_MouseFacing")))) W->SetIsChecked(PC->IsMouseFacingEnabled());
     }
+    RefreshKeyBindingLabels();
+}
+
+void UCVADUserWidget::RefreshKeyBindingLabels()
+{
+    ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer());
+    if (!PC) return;
+
+    struct FKeyLabelBinding { const TCHAR* WidgetName; const TCHAR* ActionName; };
+    static const FKeyLabelBinding Bindings[] = {
+        {TEXT("Text_Key_MoveForward"), TEXT("MoveForward")},
+        {TEXT("Text_Key_MoveBack"), TEXT("MoveBack")},
+        {TEXT("Text_Key_MoveLeft"), TEXT("MoveLeft")},
+        {TEXT("Text_Key_MoveRight"), TEXT("MoveRight")},
+        {TEXT("Text_Key_Jump"), TEXT("Jump")},
+        {TEXT("Text_Key_LightAttack"), TEXT("LightAttack")},
+        {TEXT("Text_Key_HeavyAttack"), TEXT("HeavyAttack")},
+        {TEXT("Text_Key_Dodge"), TEXT("Dodge")},
+        {TEXT("Text_Key_FlyingSword"), TEXT("FlyingSword")},
+        {TEXT("Text_Key_SwitchStance"), TEXT("SwitchStance")}
+    };
+    for (const FKeyLabelBinding& Binding : Bindings)
+    {
+        if (UTextBlock* Label=Cast<UTextBlock>(GetWidgetFromName(Binding.WidgetName)))
+        {
+            const FKey BoundKey=PC->GetBoundKey(FName(Binding.ActionName));
+            Label->SetText(BoundKey.IsValid() ? BoundKey.GetDisplayName() : NSLOCTEXT("CVAD", "UnboundKey", "未绑定"));
+        }
+    }
 }
 
 void UCVADUserWidget::HandleSettingsApplyClicked()
@@ -149,7 +188,14 @@ void UCVADUserWidget::HandleSettingsApplyClicked()
     UE_LOG(LogTemp,Log,TEXT("Settings applied from widget"));
 }
 
-void UCVADUserWidget::HandleSettingsResetClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ResetInputBindings(); }
+void UCVADUserWidget::HandleSettingsResetClicked()
+{
+    if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer()))
+    {
+        PC->ResetInputBindings();
+        RefreshKeyBindingLabels();
+    }
+}
 void UCVADUserWidget::BeginKeyCapture(FName ActionName) { PendingRebindAction=ActionName; SetKeyboardFocus(); if (UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_RebindPrompt")))) T->SetText(FText::Format(NSLOCTEXT("CVAD","PressKey","请为 {0} 按下新按键（Esc 取消）"),FText::FromName(ActionName))); }
 void UCVADUserWidget::CaptureMoveForward(){BeginKeyCapture(TEXT("MoveForward"));} void UCVADUserWidget::CaptureMoveBack(){BeginKeyCapture(TEXT("MoveBack"));}
 void UCVADUserWidget::CaptureMoveLeft(){BeginKeyCapture(TEXT("MoveLeft"));} void UCVADUserWidget::CaptureMoveRight(){BeginKeyCapture(TEXT("MoveRight"));}
@@ -169,6 +215,7 @@ FReply UCVADUserWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, cons
     { if (UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_RebindPrompt")))) T->SetText(FText::Format(NSLOCTEXT("CVAD","KeyConflict","按键已用于 {0}"),FText::FromName(Other))); return FReply::Handled(); }
     const bool bSuccess=PC->RebindAction(PendingRebindAction,Key);
     if (UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_RebindPrompt")))) T->SetText(bSuccess?FText::Format(NSLOCTEXT("CVAD","KeyBound","已绑定为 {0}"),Key.GetDisplayName()):NSLOCTEXT("CVAD","KeyFailed","绑定失败"));
+    if (bSuccess) RefreshKeyBindingLabels();
     PendingRebindAction=NAME_None;
     return FReply::Handled();
 }
@@ -201,6 +248,7 @@ OUTFIT_PAIR(Head,0) OUTFIT_PAIR(Hair,1) OUTFIT_PAIR(Hat,2) OUTFIT_PAIR(Upper,3) 
 #undef OUTFIT_PAIR
 void UCVADUserWidget::RefreshOutfitPreview()
 {
+    if(OutfitPreviewCharacter) OutfitPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
     static const TCHAR* Names[]={TEXT("Text_HeadValue"),TEXT("Text_HairValue"),TEXT("Text_HatValue"),TEXT("Text_UpperValue"),TEXT("Text_HandsValue"),TEXT("Text_LowerValue"),TEXT("Text_FeetValue")};
     static const TCHAR* Labels[]={TEXT("脸型"),TEXT("发型"),TEXT("帽子"),TEXT("上装"),TEXT("手部"),TEXT("下装"),TEXT("鞋子")}; static const int32 Counts[]={3,4,6,5,3,3,7};
     for(int32 I=0;I<7;++I)if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(Names[I])))T->SetText(FText::FromString(FString::Printf(TEXT("%s %d/%d"),Labels[I],PreviewOutfitParts[I]+1,Counts[I])));
@@ -371,6 +419,30 @@ void UCVADUserWidget::RefreshSkillDetails()
         T->SetText(bUnlocked?NSLOCTEXT("CVAD","SkillReady","可以装配"):bCanUnlock?FText::Format(NSLOCTEXT("CVAD","UnlockCost","点击解锁：{0} 技能点"),Row->SkillPointCost):Failure);
     if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_Level")))) T->SetText(FText::Format(NSLOCTEXT("CVAD","SkillLevelUI","等级 {0}"),Level));
     if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillPoints")))) T->SetText(FText::Format(NSLOCTEXT("CVAD","SkillPointsUI","技能点 {0}"),CachedPlayerState->SkillPoints));
+    if(UButton* EquipButton=Cast<UButton>(GetWidgetFromName(TEXT("Button_EquipSelected"))))
+        EquipButton->SetIsEnabled(bUnlocked&&!bEquipped&&LoadedAbilityClass!=nullptr);
+    if(UTextBlock* EquippedText=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_EquippedSkills"))))
+    {
+        static const TCHAR* SlotNames[]={TEXT("普通攻击"),TEXT("重攻击"),TEXT("闪避"),TEXT("飞剑技能"),TEXT("战斗姿态")};
+        FString Summary=TEXT("当前已装配\n");
+        for(int32 SlotIndex=0;SlotIndex<5;++SlotIndex)
+        {
+            const FName Equipped=CachedPlayerState->GetEquippedSkill(static_cast<ECVADAbilityInput>(SlotIndex));
+            const FCVADSkillRow* EquippedRow=Table->FindRow<FCVADSkillRow>(Equipped,TEXT("EquippedSummary"),false);
+            Summary+=FString::Printf(TEXT("%s：%s\n"),SlotNames[SlotIndex],EquippedRow?*EquippedRow->DisplayName.ToString():TEXT("未装配"));
+        }
+        EquippedText->SetText(FText::FromString(Summary));
+    }
+    if(UTextBlock* AvailableText=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_AvailableSkills"))))
+    {
+        FString Available=TEXT("可装配功法：");
+        for(const FName SkillName:Table->GetRowNames())
+        {
+            const FCVADSkillRow* Skill=Table->FindRow<FCVADSkillRow>(SkillName,TEXT("AvailableSummary"),false);
+            if(Skill&&(Skill->bUnlockedByDefault||CachedPlayerState->IsSkillUnlocked(SkillName))) Available+=TEXT("  ")+Skill->DisplayName.ToString();
+        }
+        AvailableText->SetText(FText::FromString(Available));
+    }
 }
 
 bool UCVADUserWidget::GetSkillNodeInfo(FName SkillRowName, FText& DisplayName, FText& Description,
@@ -495,15 +567,25 @@ bool UCVADUserWidget::GetProfileSlotInfo(int32 SlotIndex,FString& PlayerName,int
     if(!Save) return false; PlayerName=Save->PlayerDisplayName; Level=Save->PlayerLevel; SavedAt=Save->SavedAtLocalTime;
     PlayTimeSeconds=Save->TotalPlayTimeSeconds; bCompleted=Save->bHasCompletedDemo; return true;
 }
-void UCVADUserWidget::SaveSlot0(){SaveProfileToSlot(0);} void UCVADUserWidget::SaveSlot1(){SaveProfileToSlot(1);} void UCVADUserWidget::SaveSlot2(){SaveProfileToSlot(2);}
-void UCVADUserWidget::LoadSlot0(){LoadProfileFromSlot(0);} void UCVADUserWidget::LoadSlot1(){LoadProfileFromSlot(1);} void UCVADUserWidget::LoadSlot2(){LoadProfileFromSlot(2);}
-void UCVADUserWidget::DeleteSlot0(){DeleteProfileSlot(0);} void UCVADUserWidget::DeleteSlot1(){DeleteProfileSlot(1);} void UCVADUserWidget::DeleteSlot2(){DeleteProfileSlot(2);}
+void UCVADUserWidget::SaveSlot0(){SelectSaveSlot(0);} void UCVADUserWidget::SaveSlot1(){SelectSaveSlot(1);} void UCVADUserWidget::SaveSlot2(){SelectSaveSlot(2);}
+void UCVADUserWidget::SaveSelectedSlot(){SaveProfileToSlot(SelectedSaveSlot);}
+void UCVADUserWidget::LoadSelectedSlot(){LoadProfileFromSlot(SelectedSaveSlot);}
+void UCVADUserWidget::DeleteSelectedSlot(){DeleteProfileSlot(SelectedSaveSlot);}
+void UCVADUserWidget::SelectSaveSlot(int32 SlotIndex){SelectedSaveSlot=FMath::Clamp(SlotIndex,0,2);RefreshSaveSlotPreviews();}
 
 void UCVADUserWidget::RefreshSaveSlotPreviews()
 {
     SetSaveSlotPreviewText(0,Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_Slot0"))));
     SetSaveSlotPreviewText(1,Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_Slot1"))));
     SetSaveSlotPreviewText(2,Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_Slot2"))));
+    if(UTextBlock* Selected=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SelectedSlot"))))
+        Selected->SetText(FText::FromString(FString::Printf(TEXT("当前选择：存档 %d"),SelectedSaveSlot+1)));
+    for(int32 SlotIndex=0;SlotIndex<3;++SlotIndex)
+        if(UButton* Button=Cast<UButton>(GetWidgetFromName(FName(*FString::Printf(TEXT("Button_SaveSlot%d"),SlotIndex)))))
+            Button->SetBackgroundColor(SlotIndex==SelectedSaveSlot?FLinearColor(0.15f,0.55f,0.8f,1.f):FLinearColor(0.08f,0.15f,0.28f,1.f));
+    const bool bHasSave=UGameplayStatics::DoesSaveGameExist(GetProfileSlotName(SelectedSaveSlot),0);
+    if(UButton* Load=Cast<UButton>(GetWidgetFromName(TEXT("Button_LoadSelected")))) Load->SetIsEnabled(bHasSave);
+    if(UButton* Delete=Cast<UButton>(GetWidgetFromName(TEXT("Button_DeleteSelected")))) Delete->SetIsEnabled(bHasSave);
 }
 
 void UCVADUserWidget::SetSaveSlotPreviewText(int32 SlotIndex,UTextBlock* TextWidget)

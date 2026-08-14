@@ -289,7 +289,7 @@ if mapping and len(mapping.get_editor_property("mappings")) < 13:
         "IA_FlyingSword": "Q",
         "IA_SwitchStance": "Tab",
         "IA_Inventory": "B",
-        "IA_Pause": "Escape",
+        "IA_Pause": "P",
     }
     for action_name, key_name in key_map.items():
         if actions[action_name]:

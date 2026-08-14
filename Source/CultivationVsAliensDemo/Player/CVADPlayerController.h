@@ -44,6 +44,7 @@ public:
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSaveSlotsScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowNameEntryScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowOutfitScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowMultiplayerScreen();
     void SetPendingMenuAction(int32 Action, const FString& Address = FString());
     void ContinuePendingMenuAction();
     float ConsumeUnsavedPlayTime();
@@ -93,6 +94,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SaveSlotsWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> NameEntryWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> OutfitWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> MultiplayerWidgetClass;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> HUDWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> InventoryWidget;
     UPROPERTY(Transient) TObjectPtr<UCVADUserWidget> PauseWidget;
@@ -112,6 +114,7 @@ protected:
     UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Camera", meta=(ClampMin="-89.0", ClampMax="89.0")) float InitialCameraPitch = -20.f;
 
 private:
+    void RestoreGameplayInputState();
     void ApplyStartupProfile();
     const UInputAction* FindInputAction(FName ActionName) const;
     void BuildRuntimeMappingContext();
@@ -123,10 +126,11 @@ private:
     UFUNCTION(Server, Reliable) void ServerReturnToMainMenu();
     UFUNCTION(Server, Reliable) void ServerStartLobbyGame();
     void RestartBattleAuthority();
-    void ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetClass, int32 ZOrder = 40);
+    void ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetClass, int32 ZOrder = 200);
     void HandleNetworkFailure(UWorld* FailedWorld, class UNetDriver* NetDriver, ENetworkFailure::Type FailureType, const FString& ErrorString);
     FDelegateHandle NetworkFailureHandle;
     int32 PendingMenuAction = 0;
     FString PendingServerAddress;
     float LastProfileSaveWorldTime = 0.f;
+    bool bGameplayInputRestored = false;
 };

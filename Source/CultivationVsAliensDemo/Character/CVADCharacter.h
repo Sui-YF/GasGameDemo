@@ -43,6 +43,7 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginTemporaryInvulnerability(float Duration);
     UFUNCTION(BlueprintCallable, Category="Movement") void SetSprinting(bool bNewSprinting);
     UFUNCTION(BlueprintPure, Category="Movement") bool IsSprinting() const { return bSprinting; }
+    void ApplyAppearanceSelection(const int32 PartIndices[7]);
 
 protected:
     void InitializeAbilityActorInfo();

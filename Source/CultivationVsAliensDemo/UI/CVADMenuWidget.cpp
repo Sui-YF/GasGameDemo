@@ -29,6 +29,7 @@ void UCVADMenuWidget::NativeConstruct()
     if (Button_ChangeName) Button_ChangeName->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleChangeNameClicked);
     if (Button_Skills) Button_Skills->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSkillsClicked);
     if (Button_Outfit) Button_Outfit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOutfitClicked);
+    if (Button_Multiplayer) Button_Multiplayer->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleMultiplayerClicked);
     if (Button_Ready) Button_Ready->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleReadyClicked);
     if (Button_StartGame) Button_StartGame->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleStartGameClicked);
     if (Button_LeaveLobby) Button_LeaveLobby->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleLeaveLobbyClicked);
@@ -82,6 +83,7 @@ void UCVADMenuWidget::HandleSettingsClicked() { if (ACVADPlayerController* PC=Ca
 void UCVADMenuWidget::HandleChangeNameClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowNameEntryScreen(); }
 void UCVADMenuWidget::HandleSkillsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
 void UCVADMenuWidget::HandleOutfitClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowOutfitScreen(); }
+void UCVADMenuWidget::HandleMultiplayerClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowMultiplayerScreen(); }
 void UCVADMenuWidget::HandleReadyClicked(){if(ACVADPlayerState* PS=GetOwningPlayerState<ACVADPlayerState>()) PS->SetLobbyReady(!PS->bLobbyReady);}
 void UCVADMenuWidget::HandleStartGameClicked(){if(ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->RequestStartLobbyGame();}
 void UCVADMenuWidget::HandleLeaveLobbyClicked(){UGameplayStatics::OpenLevel(this,TEXT("L_MainMenu"));}

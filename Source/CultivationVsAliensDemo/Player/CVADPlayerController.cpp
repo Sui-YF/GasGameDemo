@@ -64,6 +64,8 @@ void ACVADPlayerController::HandleNetworkFailure(UWorld* FailedWorld,UNetDriver*
 void ACVADPlayerController::PlayerTick(float DeltaTime)
 {
     Super::PlayerTick(DeltaTime);
+    const bool bFrontend=GetWorld()&&GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
+    if(IsLocalController()&&!bFrontend&&!bGameplayInputRestored) RestoreGameplayInputState();
     if (IsLocalController() && bMouseFacingEnabled) UpdateMouseFacing();
     if (IsLocalController() && !bResultShown && ResultWidgetClass)
     {
@@ -170,12 +172,7 @@ void ACVADPlayerController::ServerStartLobbyGame_Implementation()
     if(!GetWorld() || !IsLobbyHost()) return;
     AGameStateBase* GS=GetWorld()->GetGameState();
     if(!GS || GS->PlayerArray.IsEmpty() || GS->PlayerArray.Num()>2) return;
-    for(APlayerState* PSBase : GS->PlayerArray)
-    {
-        const ACVADPlayerState* PS=Cast<ACVADPlayerState>(PSBase);
-        if(!PS || !PS->bLobbyReady){UE_LOG(LogCVADInput,Warning,TEXT("Lobby start rejected: not all players ready"));return;}
-    }
-    UE_LOG(LogCVADInput,Log,TEXT("Lobby ready; server traveling with %d players"),GS->PlayerArray.Num());
+    UE_LOG(LogCVADInput,Log,TEXT("Listen host starting battle with %d player(s); ready state is informational"),GS->PlayerArray.Num());
     GetWorld()->ServerTravel(TEXT("/Game/CVAD/Maps/L_CastleBattle?listen"),false);
 }
 
@@ -197,13 +194,17 @@ void ACVADPlayerController::BeginPlay()
     if (!SaveSlotsWidgetClass) SaveSlotsWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_SaveSlots.WBP_SaveSlots_C"));
     if (!NameEntryWidgetClass) NameEntryWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_NameEntry.WBP_NameEntry_C"));
     if (!OutfitWidgetClass) OutfitWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_OutfitSelect.WBP_OutfitSelect_C"));
+    if (!MultiplayerWidgetClass) MultiplayerWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_Multiplayer.WBP_Multiplayer_C"));
     UE_LOG(LogCVADInput, Log, TEXT("UI/Input assets IMC=%s InventoryAction=%s PauseAction=%s InventoryUI=%s PauseUI=%s"),
         *GetNameSafe(PlayerMappingContext), *GetNameSafe(InventoryAction), *GetNameSafe(PauseAction),
         *GetNameSafe(InventoryWidgetClass), *GetNameSafe(PauseWidgetClass));
     const bool bMainMenuMap = GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
     if (IsLocalController() && bMainMenuMap)
     {
-        const bool bLobbyMode=GetWorld()->URL.HasOption(TEXT("Lobby"));
+        // The listen host retains the Lobby URL option, but connected clients do
+        // not reliably receive that local URL option. A client on L_MainMenu is
+        // necessarily connected to the listen lobby and must see the lobby UI.
+        const bool bLobbyMode=GetNetMode()==NM_Client||GetWorld()->URL.HasOption(TEXT("Lobby"));
         if(bLobbyMode && LobbyWidgetClass)
         {
             LobbyWidget=CreateWidget<UCVADUserWidget>(this,LobbyWidgetClass);
@@ -224,6 +225,7 @@ void ACVADPlayerController::BeginPlay()
         UE_LOG(LogCVADInput, Log, TEXT("Main menu initialized Widget=%s"), *GetNameSafe(MainMenuWidget));
         return;
     }
+    if(IsLocalController()) RestoreGameplayInputState();
     CameraPitchMin = FMath::Clamp(CameraPitchMin, -89.f, 89.f);
     CameraPitchMax = FMath::Clamp(CameraPitchMax, CameraPitchMin, 89.f);
     if (PlayerCameraManager)
@@ -318,8 +320,14 @@ void ACVADPlayerController::ApplySavedInputBindings()
     for (const FName Name : Names)
     {
         FString KeyName;
-        if (GConfig->GetString(CVADInputConfigSection, *Name.ToString(), KeyName, GGameUserSettingsIni) && !KeyName.IsEmpty())
-            RebindAction(Name, FKey(*KeyName));
+        const bool bHasSavedKey=GConfig->GetString(CVADInputConfigSection,*Name.ToString(),KeyName,GGameUserSettingsIni)&&!KeyName.IsEmpty();
+        if(bHasSavedKey&&Name==TEXT("Pause")&&KeyName==TEXT("Escape"))
+        {
+            KeyName=TEXT("P");
+            GConfig->SetString(CVADInputConfigSection,TEXT("Pause"),TEXT("P"),GGameUserSettingsIni);
+            GConfig->Flush(false,GGameUserSettingsIni);
+        }
+        if(bHasSavedKey) RebindAction(Name,FKey(*KeyName));
     }
 }
 
@@ -504,8 +512,14 @@ void ACVADPlayerController::ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetC
     if (ActiveModalWidget && ActiveModalWidget->IsInViewport()) ActiveModalWidget->RemoveFromParent();
     ActiveModalWidget = CreateWidget<UCVADUserWidget>(this, WidgetClass);
     if (!ActiveModalWidget) return;
-    ActiveModalWidget->AddToViewport(ZOrder);
-    SetInputMode(FInputModeGameAndUI());
+    // Frontend roots use ZOrder 100 (main menu) and 110 (lobby). Keep every
+    // modal above those roots even when an older caller supplies a low value.
+    constexpr int32 ModalBaseZOrder = 200;
+    ActiveModalWidget->AddToViewport(FMath::Max(ZOrder, ModalBaseZOrder));
+    FInputModeUIOnly ModalInputMode;
+    ModalInputMode.SetWidgetToFocus(ActiveModalWidget->TakeWidget());
+    ModalInputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+    SetInputMode(ModalInputMode);
     bShowMouseCursor = true;
     UE_LOG(LogCVADInput, Log, TEXT("Opened modal UI %s"), *GetNameSafe(ActiveModalWidget));
 }
@@ -519,12 +533,34 @@ void ACVADPlayerController::ShowSkillTreeScreen()
 }
 void ACVADPlayerController::ShowInventoryScreen() { UE_LOG(LogCVADInput, Log, TEXT("Inventory/equipment feature disabled")); }
 void ACVADPlayerController::ShowSaveSlotsScreen() { ShowModalWidget(SaveSlotsWidgetClass, 50); }
-void ACVADPlayerController::ShowNameEntryScreen() { ShowModalWidget(NameEntryWidgetClass, 60); }
+void ACVADPlayerController::ShowNameEntryScreen()
+{
+    ShowModalWidget(NameEntryWidgetClass, 60);
+}
 void ACVADPlayerController::ShowOutfitScreen()
 {
     const bool bFrontend=GetWorld()&&GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
     if(bFrontend) ShowModalWidget(OutfitWidgetClass,55);
 }
+
+void ACVADPlayerController::RestoreGameplayInputState()
+{
+    if(!IsLocalController()) return;
+    if(GetWorld()&&UGameplayStatics::IsGamePaused(this)) UGameplayStatics::SetGamePaused(this,false);
+    ResetIgnoreMoveInput();
+    ResetIgnoreLookInput();
+    SetCinematicMode(false,false,false,true,true);
+    SetInputMode(FInputModeGameOnly());
+    bShowMouseCursor=false;
+    bEnableClickEvents=false;
+    bEnableMouseOverEvents=false;
+    FlushPressedKeys();
+    bGameplayInputRestored=true;
+    UE_LOG(LogCVADInput,Log,TEXT("Gameplay input restored Paused=%s MoveIgnored=%s LookIgnored=%s"),
+        UGameplayStatics::IsGamePaused(this)?TEXT("true"):TEXT("false"),
+        IsMoveInputIgnored()?TEXT("true"):TEXT("false"),IsLookInputIgnored()?TEXT("true"):TEXT("false"));
+}
+void ACVADPlayerController::ShowMultiplayerScreen() { ShowModalWidget(MultiplayerWidgetClass,55); }
 void ACVADPlayerController::SetPendingMenuAction(int32 Action,const FString& Address)
 {
     PendingMenuAction=Action; PendingServerAddress=Address; ShowNameEntryScreen();

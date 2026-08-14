@@ -15,4 +15,6 @@ public:
     UFUNCTION(BlueprintCallable, Category="CVAD Editor")
     static bool BuildFlyingSwordAnimationBlueprint();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool BuildAllUIControlSkeletons();
+    UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool UpdateUIBackButtons();
+    UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool UpdateSettingsKeyLabels();
 };
