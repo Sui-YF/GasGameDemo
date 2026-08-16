@@ -68,11 +68,30 @@ void ACVADEnemyCharacter::PlayBossAttackAnimation()
 
 void ACVADEnemyCharacter::MulticastPlayBossAttack_Implementation(int32 AttackRole)
 {
-    UAnimSequenceBase* Sequence=AttackRole==0?SwordBossAttack:(AttackRole==1?WingBossAttack:CasterBossAttack);
-    UAnimInstance* Anim=GetMesh()?GetMesh()->GetAnimInstance():nullptr;
-    if(!Anim || !Sequence) return;
-    Anim->PlaySlotAnimationAsDynamicMontage(Sequence,TEXT("DefaultSlot"),0.12f,0.18f,1.f,1,0.f,0.f);
-    UE_LOG(LogTemp,Verbose,TEXT("Angel Boss animation Role=%d Sequence=%s"),AttackRole,*GetNameSafe(Sequence));
+    UAnimSequenceBase* Sequence = AttackRole == 0
+        ? SwordBossAttack
+        : (AttackRole == 1 ? WingBossAttack : CasterBossAttack);
+    USkeletalMeshComponent* MeshComponent = GetMesh();
+    if (!MeshComponent || !Sequence) return;
+
+    // The imported role meshes use different animation blueprints, so their slot
+    // layouts are not guaranteed to match. Play the configured sequence directly.
+    BossAnimationClass = MeshComponent->GetAnimClass();
+    MeshComponent->PlayAnimation(Sequence, false);
+    GetWorldTimerManager().ClearTimer(BossAnimationRestoreTimer);
+    GetWorldTimerManager().SetTimer(BossAnimationRestoreTimer, this,
+        &ThisClass::RestoreBossAnimationBlueprint,
+        FMath::Max(Sequence->GetPlayLength(), 0.1f), false);
+    UE_LOG(LogTemp, Verbose, TEXT("Boss %s is playing %s"),
+        *GetName(), *GetNameSafe(Sequence));
+}
+
+void ACVADEnemyCharacter::RestoreBossAnimationBlueprint()
+{
+    if (!GetMesh() || !BossAnimationClass) return;
+
+    GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+    GetMesh()->SetAnimInstanceClass(BossAnimationClass);
 }
 
 void ACVADEnemyCharacter::OnRep_BossRole(){ApplyBossRoleVisuals();OnBossRoleChanged(BossRole);}
@@ -129,7 +148,7 @@ void ACVADEnemyCharacter::BeginPlay()
             AttributeSet=NewObject<UCVADAttributeSet>(this,TEXT("RuntimeAttributeSet"));
             AbilitySystemComponent->AddAttributeSetSubobject(AttributeSet.Get());
         }
-        UE_LOG(LogTemp,Warning,TEXT("Enemy %s recovered missing AttributeSet from legacy Blueprint"),*GetName());
+        UE_LOG(LogTemp, Log, TEXT("Enemy %s restored its legacy Blueprint AttributeSet"), *GetName());
     }
     AbilitySystemComponent->InitAbilityActorInfo(this, this);
     AbilitySystemComponent->GetGameplayAttributeValueChangeDelegate(UCVADAttributeSet::GetHealthAttribute())

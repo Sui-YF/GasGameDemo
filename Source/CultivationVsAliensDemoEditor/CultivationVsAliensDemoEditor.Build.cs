@@ -22,7 +22,9 @@ public class CultivationVsAliensDemoEditor : ModuleRules
             "Kismet",
             "BlueprintGraph",
             "AnimGraph",
-            "AnimGraphRuntime"
+            "AnimGraphRuntime",
+            "AIModule",
+            "NavigationSystem"
         });
     }
 }

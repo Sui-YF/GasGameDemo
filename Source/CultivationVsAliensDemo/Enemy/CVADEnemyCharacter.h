@@ -7,6 +7,7 @@
 class UAbilitySystemComponent;
 class UCVADAttributeSet;
 class ACVADMinionSpawner;
+class UAnimInstance;
 struct FOnAttributeChangeData;
 
 UCLASS(Blueprintable)
@@ -46,6 +47,10 @@ protected:
     /** Optional body mesh for each boss role (0 Sword, 1 Wing Vanguard, 2 Celestial Caster). Configure in the enemy Blueprint. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Visual") TArray<TObjectPtr<class USkeletalMesh>> BossRoleBodyMeshes;
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayBossAttack(int32 AttackRole);
+    void RestoreBossAnimationBlueprint();
+    UPROPERTY(Transient)
+    TSubclassOf<UAnimInstance> BossAnimationClass;
+    FTimerHandle BossAnimationRestoreTimer;
     /** Rendering/network distance only. The actor is never hidden or destroyed by this setting. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="0.0"))
     float VisualCullDistance = 0.f;

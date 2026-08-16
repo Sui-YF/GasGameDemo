@@ -16,3 +16,4 @@ Packaged/
 *.tmp
 *.pdb
 *.obj
+.codex-temp/

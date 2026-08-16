@@ -21,8 +21,6 @@ void UCVADBTTask_Combat::TickTask(UBehaviorTreeComponent& OwnerComp, uint8*, flo
         FinishLatentTask(OwnerComp, EBTNodeResult::Failed);
         return;
     }
-    // No target, hit stun and a locked boss phase are idle states, not BT
-    // failures. Keep this mandatory task alive so it resumes immediately when
-    // the replicated battle state permits combat.
+    // Idle combat states remain inside the task so AI can resume immediately.
     AI->ExecuteCombatDecision(DeltaSeconds);
 }

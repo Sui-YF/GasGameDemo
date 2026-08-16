@@ -5,6 +5,7 @@
 #include "Character/CVADCharacter.h"
 #include "EngineUtils.h"
 #include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/Composites/BTComposite_Sequence.h"
 #include "Enemy/CVADBTTask_Combat.h"
 #include "Enemy/CVADEnemyCharacter.h"
@@ -21,10 +22,20 @@ ACVADEnemyAIController::ACVADEnemyAIController()
 void ACVADEnemyAIController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
-    UBehaviorTree* Tree = BehaviorTreeAsset ? BehaviorTreeAsset.Get() : CreateFallbackBehaviorTree();
+
+    UBehaviorTree* Tree = BehaviorTreeAsset.Get();
+    if (!Tree)
+    {
+        Tree = LoadObject<UBehaviorTree>(nullptr, TEXT("/Game/CVAD/AI/BT_EnemyCombat.BT_EnemyCombat"));
+    }
+    if (!Tree)
+    {
+        Tree = CreateFallbackBehaviorTree();
+    }
+
     if (!Tree || !RunBehaviorTree(Tree))
     {
-        UE_LOG(LogTemp, Error, TEXT("AI %s failed to start mandatory Behavior Tree"), *GetName());
+        UE_LOG(LogTemp, Error, TEXT("AI %s could not start its behavior tree"), *GetName());
     }
 }
 
@@ -75,7 +86,14 @@ bool ACVADEnemyAIController::ExecuteCombatDecision(float DeltaSeconds)
 {
     if (!HasAuthority() || !GetPawn()) return false;
 
-    if (const ACVADEnemyCharacter* Enemy = Cast<ACVADEnemyCharacter>(GetPawn()); Enemy && Enemy->IsHitStunned())
+    const ACVADEnemyCharacter* ControlledEnemy = Cast<ACVADEnemyCharacter>(GetPawn());
+    if (UBlackboardComponent* BlackboardComponent = GetBlackboardComponent())
+    {
+        BlackboardComponent->SetValueAsBool(TEXT("IsBoss"), ControlledEnemy && ControlledEnemy->IsBoss());
+        BlackboardComponent->SetValueAsInt(TEXT("BossPhase"), ActiveBossPhase);
+    }
+
+    if (ControlledEnemy && ControlledEnemy->IsHitStunned())
     {
         StopMovement();
         return false;
@@ -86,7 +104,7 @@ bool ACVADEnemyAIController::ExecuteCombatDecision(float DeltaSeconds)
         return true;
     }
 
-    if (const ACVADEnemyCharacter* Enemy = Cast<ACVADEnemyCharacter>(GetPawn()); Enemy && Enemy->IsBoss())
+    if (ControlledEnemy && ControlledEnemy->IsBoss())
     {
         for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
         {
@@ -109,6 +127,10 @@ bool ACVADEnemyAIController::ExecuteCombatDecision(float DeltaSeconds)
     }
     if (!CurrentTarget.IsValid()) CurrentTarget = FindNearestPlayer();
     AActor* Target = CurrentTarget.Get();
+    if (UBlackboardComponent* BlackboardComponent = GetBlackboardComponent())
+    {
+        BlackboardComponent->SetValueAsObject(TEXT("TargetActor"), Target);
+    }
     if (!Target) return false;
 
     const float Distance = FVector::Dist2D(GetPawn()->GetActorLocation(), Target->GetActorLocation());

@@ -1,5 +1,6 @@
 #include "Battle/CVADMinionSpawner.h"
 #include "Character/CVADCharacter.h"
+#include "Components/CapsuleComponent.h"
 #include "Enemy/CVADEnemyCharacter.h"
 #include "Components/BoxComponent.h"
 #include "NavigationSystem.h"
@@ -103,6 +104,15 @@ void ACVADMinionSpawner::ResetSpawner()
 void ACVADMinionSpawner::DebugSpawnBoss()
 {
 #if !UE_BUILD_SHIPPING
+    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+    {
+        while (It->BattlePhase != ECVADBattlePhase::Boss
+            && It->BattlePhase != ECVADBattlePhase::Results)
+        {
+            It->AdvancePhase();
+        }
+        break;
+    }
     CompleteSpawner();
 #endif
 }
@@ -195,7 +205,8 @@ void ACVADMinionSpawner::CompleteSpawner()
     StopSpawning();
     ACVADBattleDirector* Director = nullptr;
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { Director = *It; break; }
-    if (BossClass && (!Director || Director->RegisteredBosses.IsEmpty()))
+    const bool bBossStageReady = !Director || Director->IsBossStageReady();
+    if (BossClass && bBossStageReady && (!Director || Director->RegisteredBosses.IsEmpty()))
     {
         for(int32 Index=0;Index<3;++Index)
         {
@@ -230,11 +241,24 @@ FVector ACVADMinionSpawner::FindSpawnLocation() const
     RandomPoint.X=FMath::Clamp(RandomPoint.X,Origin.X-Extent.X,Origin.X+Extent.X);
     RandomPoint.Y=FMath::Clamp(RandomPoint.Y,Origin.Y-Extent.Y,Origin.Y+Extent.Y);
     FNavLocation NavLocation;
+    float CapsuleHalfHeight = 88.f;
+    if (MinionClass)
+    {
+        const ACVADEnemyCharacter* DefaultMinion = MinionClass->GetDefaultObject<ACVADEnemyCharacter>();
+        if (DefaultMinion && DefaultMinion->GetCapsuleComponent())
+        {
+            CapsuleHalfHeight = DefaultMinion->GetCapsuleComponent()->GetScaledCapsuleHalfHeight();
+        }
+    }
+
     if (const UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
     {
-        if (Nav->ProjectPointToNavigation(RandomPoint, NavLocation, FVector(300.f, 300.f, 600.f))) return NavLocation.Location;
+        if (Nav->ProjectPointToNavigation(RandomPoint, NavLocation, FVector(300.f, 300.f, 600.f)))
+        {
+            return NavLocation.Location + FVector(0.f, 0.f, CapsuleHalfHeight + 2.f);
+        }
     }
-    return RandomPoint;
+    return RandomPoint + FVector(0.f, 0.f, CapsuleHalfHeight + 2.f);
 }
 
 void ACVADMinionSpawner::PruneInvalidEntries()

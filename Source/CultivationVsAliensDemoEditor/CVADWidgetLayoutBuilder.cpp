@@ -29,6 +29,13 @@
 #include "AnimGraphNode_Slot.h"
 #include "AnimGraphNode_LayeredBoneBlend.h"
 #include "Animation/Skeleton.h"
+#include "BehaviorTree/BehaviorTree.h"
+#include "BehaviorTree/BlackboardData.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Object.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Bool.h"
+#include "BehaviorTree/Blackboard/BlackboardKeyType_Int.h"
+#include "BehaviorTree/Composites/BTComposite_Sequence.h"
+#include "Enemy/CVADBTTask_Combat.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphSchema.h"
 #include "AssetRegistry/AssetRegistryModule.h"
@@ -93,17 +100,6 @@ namespace
             const UEdGraphSchema* Schema = Graph->GetSchema();
             if (SlotInput->LinkedTo.Num() == 0 && !Schema->TryCreateConnection(LocomotionOutput, SlotInput)) return false;
 
-            // Drive the final pose directly from the combat slot. The previous
-            // layered-bone graph accepted and advanced montages but did not pass
-            // their pose to the runtime-merged modular mesh. CharacterMovement
-            // remains authoritative and root motion is ignored during attacks,
-            // so players can still move and jump while this full-body pose plays.
-            RootInput->BreakAllPinLinks();
-            SlotOutput->BreakAllPinLinks();
-            if(!Schema->TryCreateConnection(SlotOutput,RootInput)) return false;
-            UE_LOG(LogTemp,Display,TEXT("CVAD connected combat slot directly to final pose in %s"),*GetNameSafe(Blueprint));
-            return true;
-
             FName UpperBodyBone = NAME_None;
             if (Blueprint->TargetSkeleton)
             {
@@ -120,10 +116,6 @@ namespace
                 return false;
             }
 
-            // A depth of zero only affects the branch root and leaves the chest, arms and
-            // hands on the locomotion pose. That made combat abilities activate correctly
-            // while the visible upper body appeared frozen. Repair previously generated
-            // blend nodes in place and avoid nesting another blend on every asset rebuild.
             bool bExistingCombatBlend = false;
             for (UEdGraphNode* Existing : Graph->Nodes)
             {
@@ -143,6 +135,22 @@ namespace
             }
             if (bExistingCombatBlend)
             {
+                UEdGraphPin* ExistingBlendOutput = nullptr;
+                for (UEdGraphNode* Existing : Graph->Nodes)
+                {
+                    const UAnimGraphNode_LayeredBoneBlend* ExistingBlend = Cast<UAnimGraphNode_LayeredBoneBlend>(Existing);
+                    if (!ExistingBlend) continue;
+                    for (UEdGraphPin* Pin : ExistingBlend->Pins)
+                    {
+                        if (Pin && Pin->Direction == EGPD_Output) { ExistingBlendOutput = Pin; break; }
+                    }
+                    if (ExistingBlendOutput) break;
+                }
+                if (ExistingBlendOutput && !RootInput->LinkedTo.Contains(ExistingBlendOutput))
+                {
+                    RootInput->BreakAllPinLinks();
+                    Schema->TryCreateConnection(ExistingBlendOutput, RootInput);
+                }
                 UE_LOG(LogTemp, Display, TEXT("CVAD repaired existing UpperBody blend depth in %s"), *GetNameSafe(Blueprint));
                 return true;
             }
@@ -478,7 +486,7 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
 
     // The blend asset already exists and is saved by the outer asset rebuild. Saving
     // its package again from this commandlet path can re-enter package finalization.
-    UE_LOG(LogTemp, Display, TEXT("CVAD combat AnimBPs built with direct combat slot; flying blend players=%d"), ReplacedPlayers);
+    UE_LOG(LogTemp, Display, TEXT("CVAD combat AnimBPs built with an UpperBody layer; flying blend players=%d"), ReplacedPlayers);
     return true;
 }
 
@@ -532,6 +540,50 @@ bool UCVADEditorAssetBuilder::BuildMinionAnimationBlueprint()
     UE_LOG(LogTemp,Display,TEXT("CVAD minion AnimBP built Nodes=%d BlendSaved=%s BlueprintSaved=%s"),Replaced,
         bBlendSaved?TEXT("true"):TEXT("false"),bBlueprintSaved?TEXT("true"):TEXT("false"));
     return bBlendSaved&&bBlueprintSaved;
+}
+
+bool UCVADEditorAssetBuilder::BuildEnemyAIAssets()
+{
+    UPackage* BlackboardPackage=CreatePackage(TEXT("/Game/CVAD/AI/BB_EnemyCombat"));
+    UBlackboardData* Blackboard=FindObject<UBlackboardData>(BlackboardPackage,TEXT("BB_EnemyCombat"));
+    if(!Blackboard)
+    {
+        Blackboard=NewObject<UBlackboardData>(BlackboardPackage,TEXT("BB_EnemyCombat"),RF_Public|RF_Standalone);
+        FAssetRegistryModule::AssetCreated(Blackboard);
+    }
+    Blackboard->Keys.Reset();
+    auto AddKey=[Blackboard](const TCHAR* Name,UBlackboardKeyType* Type)
+    {
+        FBlackboardEntry Entry;Entry.EntryName=Name;Entry.KeyType=Type;Blackboard->Keys.Add(Entry);
+    };
+    UBlackboardKeyType_Object* TargetType=NewObject<UBlackboardKeyType_Object>(Blackboard);
+    TargetType->BaseClass=AActor::StaticClass();
+    AddKey(TEXT("TargetActor"),TargetType);
+    AddKey(TEXT("IsBoss"),NewObject<UBlackboardKeyType_Bool>(Blackboard));
+    AddKey(TEXT("BossPhase"),NewObject<UBlackboardKeyType_Int>(Blackboard));
+    Blackboard->MarkPackageDirty();
+
+    UPackage* TreePackage=CreatePackage(TEXT("/Game/CVAD/AI/BT_EnemyCombat"));
+    UBehaviorTree* Tree=FindObject<UBehaviorTree>(TreePackage,TEXT("BT_EnemyCombat"));
+    if(!Tree)
+    {
+        Tree=NewObject<UBehaviorTree>(TreePackage,TEXT("BT_EnemyCombat"),RF_Public|RF_Standalone);
+        FAssetRegistryModule::AssetCreated(Tree);
+    }
+    Tree->BlackboardAsset=Blackboard;
+    UBTComposite_Sequence* Root=NewObject<UBTComposite_Sequence>(Tree,TEXT("CombatLoop"));
+    UCVADBTTask_Combat* CombatTask=NewObject<UCVADBTTask_Combat>(Tree,TEXT("AcquireMoveAttack"));
+    Root->Children.AddDefaulted();Root->Children[0].ChildTask=CombatTask;Tree->RootNode=Root;
+    Tree->MarkPackageDirty();
+
+    FSavePackageArgs Args;Args.TopLevelFlags=RF_Public|RF_Standalone;
+    const bool bBlackboardSaved=UPackage::SavePackage(BlackboardPackage,Blackboard,
+        *FPackageName::LongPackageNameToFilename(BlackboardPackage->GetName(),FPackageName::GetAssetPackageExtension()),Args);
+    const bool bTreeSaved=UPackage::SavePackage(TreePackage,Tree,
+        *FPackageName::LongPackageNameToFilename(TreePackage->GetName(),FPackageName::GetAssetPackageExtension()),Args);
+    UE_LOG(LogTemp,Display,TEXT("CVAD AI assets Blackboard=%s BehaviorTree=%s"),
+        bBlackboardSaved?TEXT("saved"):TEXT("failed"),bTreeSaved?TEXT("saved"):TEXT("failed"));
+    return bBlackboardSaved&&bTreeSaved;
 }
 
 bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
