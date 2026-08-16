@@ -69,9 +69,16 @@ void ACVADPlayerController::PlayerTick(float DeltaTime)
     if (IsLocalController() && bMouseFacingEnabled) UpdateMouseFacing();
     if (IsLocalController() && !bResultShown && ResultWidgetClass)
     {
+        const ACVADCharacter* LocalCharacter=Cast<ACVADCharacter>(GetPawn());
+        const bool bLocalPlayerDown=LocalCharacter && LocalCharacter->IsPlayerDown();
+        bool bBattleFinished=false;
         for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
         {
-            if (It->BattlePhase != ECVADBattlePhase::Results) break;
+            bBattleFinished=It->BattlePhase==ECVADBattlePhase::Results;
+            break;
+        }
+        if(bLocalPlayerDown || bBattleFinished)
+        {
             ResultWidget = CreateWidget<UCVADUserWidget>(this, ResultWidgetClass);
             if (ResultWidget)
             {
@@ -81,9 +88,8 @@ void ACVADPlayerController::PlayerTick(float DeltaTime)
                 SetIgnoreMoveInput(true);
                 SetIgnoreLookInput(false);
                 bResultShown = true;
-                UE_LOG(LogCVADInput, Log, TEXT("Battle result screen shown"));
+                UE_LOG(LogCVADInput, Log, TEXT("Battle result/death screen shown PlayerDown=%s"),bLocalPlayerDown?TEXT("true"):TEXT("false"));
             }
-            break;
         }
     }
 }

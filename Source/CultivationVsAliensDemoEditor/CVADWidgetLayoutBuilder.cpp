@@ -46,14 +46,6 @@ namespace
             Graph->GetNodesOfClass(Roots);
             if (Roots.Num() != 1) continue;
 
-            for (UEdGraphNode* Existing : Graph->Nodes)
-            {
-                if (const UAnimGraphNode_LayeredBoneBlend* ExistingBlend = Cast<UAnimGraphNode_LayeredBoneBlend>(Existing))
-                {
-                    if (ExistingBlend->Node.LayerSetup.Num() > 0) return true;
-                }
-            }
-
             UEdGraphPin* RootInput = nullptr;
             for (UEdGraphPin* Pin : Roots[0]->Pins)
             {
@@ -101,6 +93,17 @@ namespace
             const UEdGraphSchema* Schema = Graph->GetSchema();
             if (SlotInput->LinkedTo.Num() == 0 && !Schema->TryCreateConnection(LocomotionOutput, SlotInput)) return false;
 
+            // Drive the final pose directly from the combat slot. The previous
+            // layered-bone graph accepted and advanced montages but did not pass
+            // their pose to the runtime-merged modular mesh. CharacterMovement
+            // remains authoritative and root motion is ignored during attacks,
+            // so players can still move and jump while this full-body pose plays.
+            RootInput->BreakAllPinLinks();
+            SlotOutput->BreakAllPinLinks();
+            if(!Schema->TryCreateConnection(SlotOutput,RootInput)) return false;
+            UE_LOG(LogTemp,Display,TEXT("CVAD connected combat slot directly to final pose in %s"),*GetNameSafe(Blueprint));
+            return true;
+
             FName UpperBodyBone = NAME_None;
             if (Blueprint->TargetSkeleton)
             {
@@ -117,10 +120,37 @@ namespace
                 return false;
             }
 
+            // A depth of zero only affects the branch root and leaves the chest, arms and
+            // hands on the locomotion pose. That made combat abilities activate correctly
+            // while the visible upper body appeared frozen. Repair previously generated
+            // blend nodes in place and avoid nesting another blend on every asset rebuild.
+            bool bExistingCombatBlend = false;
+            for (UEdGraphNode* Existing : Graph->Nodes)
+            {
+                UAnimGraphNode_LayeredBoneBlend* ExistingBlend = Cast<UAnimGraphNode_LayeredBoneBlend>(Existing);
+                if (!ExistingBlend) continue;
+                for (FInputBlendPose& Layer : ExistingBlend->Node.LayerSetup)
+                {
+                    for (FBranchFilter& Filter : Layer.BranchFilters)
+                    {
+                        if (Filter.BoneName == UpperBodyBone)
+                        {
+                            Filter.BlendDepth = 1;
+                            bExistingCombatBlend = true;
+                        }
+                    }
+                }
+            }
+            if (bExistingCombatBlend)
+            {
+                UE_LOG(LogTemp, Display, TEXT("CVAD repaired existing UpperBody blend depth in %s"), *GetNameSafe(Blueprint));
+                return true;
+            }
+
             FGraphNodeCreator<UAnimGraphNode_LayeredBoneBlend> BlendCreator(*Graph);
             UAnimGraphNode_LayeredBoneBlend* LayeredBlend = BlendCreator.CreateNode();
             LayeredBlend->Node.AddPose();
-            LayeredBlend->Node.LayerSetup[0].BranchFilters.Add({UpperBodyBone, 0});
+            LayeredBlend->Node.LayerSetup[0].BranchFilters.Add({UpperBodyBone, 1});
             LayeredBlend->Node.bMeshSpaceRotationBlend = true;
             LayeredBlend->Node.bBlendRootMotionBasedOnRootBone = true;
             LayeredBlend->NodePosX = Roots[0]->NodePosX - 240;
@@ -419,11 +449,11 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
     FlyingBlend->ValidateSampleData();
 
     UAnimBlueprint* FlyingBlueprint = LoadObject<UAnimBlueprint>(nullptr,
-        TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSword.ABP_LanFang_FlyingSword"));
+        TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSwordV2.ABP_LanFang_FlyingSwordV2"));
     if (!FlyingBlueprint)
     {
-        UPackage* BlueprintPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSword"));
-        FlyingBlueprint = Cast<UAnimBlueprint>(StaticDuplicateObject(SourceBlueprint, BlueprintPackage, TEXT("ABP_LanFang_FlyingSword")));
+        UPackage* BlueprintPackage = CreatePackage(TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSwordV2"));
+        FlyingBlueprint = Cast<UAnimBlueprint>(StaticDuplicateObject(SourceBlueprint, BlueprintPackage, TEXT("ABP_LanFang_FlyingSwordV2")));
         FAssetRegistryModule::AssetCreated(FlyingBlueprint);
     }
 
@@ -446,12 +476,62 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
     FlyingBlend->MarkPackageDirty();
     if (!SaveAnimBlueprint(FlyingBlueprint)) return false;
 
-    FSavePackageArgs SaveArgs;
-    SaveArgs.TopLevelFlags = RF_Public | RF_Standalone;
-    UPackage::SavePackage(BlendPackage, FlyingBlend,
-        *FPackageName::LongPackageNameToFilename(BlendPackage->GetName(), FPackageName::GetAssetPackageExtension()), SaveArgs);
-    UE_LOG(LogTemp, Display, TEXT("CVAD combat AnimBPs built with UpperBody slot; flying blend players=%d"), ReplacedPlayers);
+    // The blend asset already exists and is saved by the outer asset rebuild. Saving
+    // its package again from this commandlet path can re-enter package finalization.
+    UE_LOG(LogTemp, Display, TEXT("CVAD combat AnimBPs built with direct combat slot; flying blend players=%d"), ReplacedPlayers);
     return true;
+}
+
+bool UCVADEditorAssetBuilder::BuildMinionAnimationBlueprint()
+{
+    UAnimBlueprint* SourceBlueprint=LoadObject<UAnimBlueprint>(nullptr,
+        TEXT("/Game/LanFang/Animations/In-Place/MoveBasic/Female_AnimBP.Female_AnimBP"));
+    UBlendSpace1D* SourceBlend=LoadObject<UBlendSpace1D>(nullptr,
+        TEXT("/Game/LanFang/Animations/In-Place/MoveBasic/Female_2D.Female_2D"));
+    UAnimSequence* Idle=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/SkeletonArmy/Animations/Footman/Skeleton_Idle.Skeleton_Idle"));
+    UAnimSequence* Walk=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/SkeletonArmy/Animations/Footman/Skeleton_1H_walk.Skeleton_1H_walk"));
+    UAnimSequence* Run=LoadObject<UAnimSequence>(nullptr,TEXT("/Game/SkeletonArmy/Animations/Footman/Skeleton_Run.Skeleton_Run"));
+    if(!SourceBlueprint||!SourceBlend||!Idle||!Walk||!Run||!Idle->GetSkeleton()) return false;
+
+    UPackage* BlendPackage=CreatePackage(TEXT("/Game/CVAD/Animations/BS_SkeletonMinion"));
+    UBlendSpace1D* Blend=FindObject<UBlendSpace1D>(BlendPackage,TEXT("BS_SkeletonMinion"));
+    if(!Blend)
+    {
+        Blend=Cast<UBlendSpace1D>(StaticDuplicateObject(SourceBlend,BlendPackage,TEXT("BS_SkeletonMinion")));
+        FAssetRegistryModule::AssetCreated(Blend);
+    }
+    Blend->SetSkeleton(Idle->GetSkeleton());
+    if(Blend->GetBlendSamples().Num()<3) return false;
+    Blend->ReplaceSampleAnimation(0,Idle);
+    Blend->ReplaceSampleAnimation(1,Walk);
+    Blend->ReplaceSampleAnimation(2,Run);
+    Blend->ValidateSampleData();
+
+    UPackage* BlueprintPackage=CreatePackage(TEXT("/Game/CVAD/Animations/ABP_SkeletonMinion"));
+    UAnimBlueprint* Blueprint=FindObject<UAnimBlueprint>(BlueprintPackage,TEXT("ABP_SkeletonMinion"));
+    if(!Blueprint)
+    {
+        Blueprint=Cast<UAnimBlueprint>(StaticDuplicateObject(SourceBlueprint,BlueprintPackage,TEXT("ABP_SkeletonMinion")));
+        FAssetRegistryModule::AssetCreated(Blueprint);
+    }
+    Blueprint->TargetSkeleton=Idle->GetSkeleton();
+    int32 Replaced=0;
+    TArray<UEdGraph*> Graphs;Blueprint->GetAllGraphs(Graphs);
+    for(UEdGraph* Graph:Graphs) for(UEdGraphNode* Node:Graph->Nodes)
+        if(UAnimGraphNode_BlendSpacePlayer* Player=Cast<UAnimGraphNode_BlendSpacePlayer>(Node))
+        {Player->Node.SetBlendSpace(Blend);++Replaced;}
+    if(Replaced==0) return false;
+    FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
+    FKismetEditorUtilities::CompileBlueprint(Blueprint);
+    Blueprint->MarkPackageDirty();Blend->MarkPackageDirty();
+    FSavePackageArgs Args;Args.TopLevelFlags=RF_Public|RF_Standalone;
+    const bool bBlendSaved=UPackage::SavePackage(BlendPackage,Blend,
+        *FPackageName::LongPackageNameToFilename(BlendPackage->GetName(),FPackageName::GetAssetPackageExtension()),Args);
+    const bool bBlueprintSaved=UPackage::SavePackage(BlueprintPackage,Blueprint,
+        *FPackageName::LongPackageNameToFilename(BlueprintPackage->GetName(),FPackageName::GetAssetPackageExtension()),Args);
+    UE_LOG(LogTemp,Display,TEXT("CVAD minion AnimBP built Nodes=%d BlendSaved=%s BlueprintSaved=%s"),Replaced,
+        bBlendSaved?TEXT("true"):TEXT("false"),bBlueprintSaved?TEXT("true"):TEXT("false"));
+    return bBlendSaved&&bBlueprintSaved;
 }
 
 bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
@@ -499,6 +579,82 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
         UWidgetBlueprint* BP = LoadWidgetBlueprint(*Path);
         if (!BP || !BP->WidgetTree) { bAllSucceeded = false; continue; }
         UWidgetTree* Tree = BP->WidgetTree; Tree->Modify(); Tree->RootWidget = nullptr;
+        if(Page.Asset==FString(TEXT("WBP_OutfitSelect")))
+        {
+            UCanvasPanel* Root=Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("OutfitRoot")); Tree->RootWidget=Root;
+            auto Place=[Root](UWidget* Widget,float X,float Y,float W,float H)
+            {
+                UCanvasPanelSlot* Slot=Root->AddChildToCanvas(Widget);
+                Slot->SetPosition(FVector2D(X,Y)); Slot->SetSize(FVector2D(W,H));
+            };
+            auto AddText=[Tree,&Place](const TCHAR* Name,const FText& Value,float X,float Y,float W,float H,int32 FontSize)
+            {
+                UTextBlock* Label=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),Name); Label->bIsVariable=true;
+                Label->SetText(Value); Label->SetJustification(ETextJustify::Center); FSlateFontInfo Font=Label->GetFont(); Font.Size=FontSize; Label->SetFont(Font);
+                Place(Label,X,Y,W,H); return Label;
+            };
+            auto AddButton=[Tree,&Place](const TCHAR* Name,const FText& Value,float X,float Y,float W,float H)
+            {
+                UButton* Button=Tree->ConstructWidget<UButton>(UButton::StaticClass(),Name); Button->bIsVariable=true;
+                UTextBlock* Label=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),*FString::Printf(TEXT("Label_%s"),Name));
+                Label->SetText(Value); Label->SetJustification(ETextJustify::Center); FSlateFontInfo Font=Label->GetFont(); Font.Size=18; Label->SetFont(Font); Button->AddChild(Label);
+                Place(Button,X,Y,W,H); return Button;
+            };
+
+            UBorder* Background=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("OutfitBackground"));
+            Background->SetBrushColor(FLinearColor(0.012f,0.025f,0.055f,1.f)); Place(Background,0.f,0.f,1366.f,768.f);
+            AddText(TEXT("Text_OutfitTitle"),FText::FromString(TEXT("角色外观")),483.f,20.f,400.f,48.f,30);
+            UViewport* Preview=Tree->ConstructWidget<UViewport>(UViewport::StaticClass(),TEXT("Viewport_OutfitPreview")); Preview->bIsVariable=true;
+            Place(Preview,403.f,78.f,560.f,570.f);
+            const TCHAR* ValueNames[]={TEXT("Text_HairValue"),TEXT("Text_HatValue"),TEXT("Text_UpperValue"),TEXT("Text_LowerValue"),TEXT("Text_FeetValue")};
+            const TCHAR* PrevNames[]={TEXT("Button_HairPrev"),TEXT("Button_HatPrev"),TEXT("Button_UpperPrev"),TEXT("Button_LowerPrev"),TEXT("Button_FeetPrev")};
+            const TCHAR* NextNames[]={TEXT("Button_HairNext"),TEXT("Button_HatNext"),TEXT("Button_UpperNext"),TEXT("Button_LowerNext"),TEXT("Button_FeetNext")};
+            const TCHAR* Categories[]={TEXT("发型"),TEXT("帽子"),TEXT("上装"),TEXT("下装"),TEXT("鞋子")};
+            for(int32 Index=0;Index<5;++Index)
+            {
+                const float Y=145.f+Index*88.f;
+                AddButton(PrevNames[Index],FText::FromString(FString::Printf(TEXT("<  %s"),Categories[Index])),183.f,Y,200.f,46.f);
+                AddButton(NextNames[Index],FText::FromString(FString::Printf(TEXT("%s  >"),Categories[Index])),983.f,Y,200.f,46.f);
+                AddText(ValueNames[Index],FText::FromString(FString::Printf(TEXT("%s 1/1"),Categories[Index])),513.f,Y,340.f,36.f,17);
+            }
+            UEditableTextBox* NameInput=Tree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(),TEXT("Input_PlayerName")); NameInput->bIsVariable=true;
+            NameInput->SetHintText(FText::FromString(TEXT("输入角色名称"))); Place(NameInput,403.f,662.f,360.f,42.f);
+            AddButton(TEXT("Button_OutfitConfirm"),FText::FromString(TEXT("确认使用")),783.f,662.f,180.f,42.f);
+            AddButton(TEXT("Button_CameraZoomIn"),FText::FromString(TEXT("镜头拉近")),403.f,612.f,104.f,38.f);
+            AddButton(TEXT("Button_CameraZoomOut"),FText::FromString(TEXT("镜头拉远")),513.f,612.f,104.f,38.f);
+            AddButton(TEXT("Button_CameraUp"),FText::FromString(TEXT("镜头上移")),623.f,612.f,104.f,38.f);
+            AddButton(TEXT("Button_CameraDown"),FText::FromString(TEXT("镜头下移")),733.f,612.f,104.f,38.f);
+            AddButton(TEXT("Button_CameraReset"),FText::FromString(TEXT("重置镜头")),843.f,612.f,120.f,38.f);
+            AddButton(TEXT("Button_Close"),FText::FromString(TEXT("返回")),34.f,30.f,130.f,42.f);
+            AddText(TEXT("Text_OutfitStatus"),FText::GetEmpty(),403.f,710.f,560.f,32.f,16);
+            SaveWidgetBlueprint(BP);
+            continue;
+        }
+        if(Page.Asset==FString(TEXT("WBP_SkillTree")))
+        {
+            UCanvasPanel* Root=Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("SkillRoot"));Tree->RootWidget=Root;
+            auto Place=[Root](UWidget* Widget,float X,float Y,float W,float H){UCanvasPanelSlot* Slot=Root->AddChildToCanvas(Widget);Slot->SetPosition(FVector2D(X,Y));Slot->SetSize(FVector2D(W,H));};
+            auto Text=[Tree,&Place](const TCHAR* Name,const TCHAR* Value,float X,float Y,float W,float H,int32 Size,ETextJustify::Type Align=ETextJustify::Left)
+            {UTextBlock* T=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),Name);T->bIsVariable=true;T->SetText(FText::FromString(Value));T->SetJustification(Align);FSlateFontInfo F=T->GetFont();F.Size=Size;T->SetFont(F);Place(T,X,Y,W,H);return T;};
+            auto Button=[Tree,&Place](const TCHAR* Name,const TCHAR* Value,float X,float Y,float W,float H)
+            {UButton* B=Tree->ConstructWidget<UButton>(UButton::StaticClass(),Name);B->bIsVariable=true;UTextBlock* L=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),*FString::Printf(TEXT("Label_%s"),Name));L->SetText(FText::FromString(Value));L->SetJustification(ETextJustify::Center);FSlateFontInfo F=L->GetFont();F.Size=18;L->SetFont(F);B->AddChild(L);Place(B,X,Y,W,H);return B;};
+            UBorder* BG=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SkillBackground"));BG->SetBrushColor(FLinearColor(0.01f,0.02f,0.045f,1.f));Place(BG,0,0,1366,768);
+            Text(TEXT("Text_SkillTreeTitle"),TEXT("功法研习与技能装配"),410,24,546,48,30,ETextJustify::Center);
+            Text(TEXT("Text_Level"),TEXT("等级 1"),70,82,180,34,18);Text(TEXT("Text_Experience"),TEXT("经验 0/100"),260,82,220,34,18);Text(TEXT("Text_SkillPoints"),TEXT("技能点 99"),500,82,220,34,20);
+            Text(TEXT("Text_AvailableSkills"),TEXT("可研习功法（点击查看）"),70,135,530,40,22);Text(TEXT("Text_EquippedTitle"),TEXT("当前装配"),70,590,530,36,20);
+            const TCHAR* SkillButtons[]={TEXT("Button_SwordAttack1"),TEXT("Button_SwordAttack2"),TEXT("Button_SwordAttack3"),TEXT("Button_SwordAttack4"),TEXT("Button_SwordAttack5"),TEXT("Button_FlyingSword1"),TEXT("Button_FlyingSword2"),TEXT("Button_FlyingSword3")};
+            const TCHAR* SkillLabels[]={TEXT("持剑 · 破阵式"),TEXT("持剑 · 普攻二"),TEXT("持剑 · 普攻三"),TEXT("持剑 · 普攻四"),TEXT("持剑 · 绝技"),TEXT("御剑 · 飞剑诀"),TEXT("御剑 · 剑阵"),TEXT("御剑 · 追魂剑")};
+            for(int32 I=0;I<8;++I) Button(SkillButtons[I],SkillLabels[I],70+(I%2)*270,185+(I/2)*82,250,60);
+            UBorder* Detail=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SkillDetailPanel"));Detail->SetBrushColor(FLinearColor(0.035f,0.065f,0.12f,1.f));Place(Detail,650,135,640,475);
+            Text(TEXT("Text_SelectedSkillName"),TEXT("请选择一项功法"),690,172,560,48,26);
+            Text(TEXT("Text_SelectedSkillDescription"),TEXT("这里显示技能效果、伤害、范围和升级说明。"),690,235,560,145,18);
+            Text(TEXT("Text_Prerequisite"),TEXT("前置：无"),690,400,560,40,18);
+            Text(TEXT("Text_SkillCost"),TEXT("消耗技能点：0"),690,452,560,40,20);
+            Button(TEXT("Button_EquipSelected"),TEXT("购买 / 装配所选技能"),690,520,300,58);
+            Text(TEXT("Text_EquippedSkills"),TEXT("已装配技能会显示在这里"),70,628,550,42,18);
+            Button(TEXT("Button_Close"),TEXT("返回"),70,690,150,46);
+            SaveWidgetBlueprint(BP);continue;
+        }
         UScrollBox* Root = Tree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("ControlRoot")); Tree->RootWidget = Root;
         UVerticalBox* Controls = Tree->ConstructWidget<UVerticalBox>(UVerticalBox::StaticClass(), TEXT("Controls")); Root->AddChild(Controls);
         for (const FString& N : Page.Texts) { UTextBlock* W=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), *N); W->bIsVariable=true; W->SetText(FText::FromString(TextLabels.FindRef(N))); Controls->AddChild(W); }
@@ -514,13 +670,6 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
         for (const FString& N : Page.Checks) { UCheckBox* W=Tree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
         for (const FString& N : Page.Combos) { UComboBoxString* W=Tree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
         for (const FString& N : Page.Inputs) { UEditableTextBox* W=Tree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(), *N); W->bIsVariable=true; Controls->AddChild(W); }
-        if(Page.Asset==FString(TEXT("WBP_OutfitSelect")))
-        {
-            USizeBox* PreviewSize=Tree->ConstructWidget<USizeBox>(USizeBox::StaticClass(),TEXT("OutfitPreviewSize"));
-            PreviewSize->SetWidthOverride(440.f); PreviewSize->SetHeightOverride(520.f); Controls->InsertChildAt(1,PreviewSize);
-            UViewport* Preview=Tree->ConstructWidget<UViewport>(UViewport::StaticClass(),TEXT("Viewport_OutfitPreview"));
-            Preview->bIsVariable=true; PreviewSize->AddChild(Preview);
-        }
         SaveWidgetBlueprint(BP);
     }
     return bAllSucceeded;

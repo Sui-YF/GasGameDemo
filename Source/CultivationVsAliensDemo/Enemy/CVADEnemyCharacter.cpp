@@ -17,7 +17,6 @@
 #include "GameplayTagsManager.h"
 #include "DrawDebugHelpers.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "UObject/ConstructorHelpers.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimSequenceBase.h"
 
@@ -37,24 +36,10 @@ ACVADEnemyCharacter::ACVADEnemyCharacter()
     AngelWingRight->SetupAttachment(GetMesh()); AngelWingRight->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     AngelSword=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("AngelSword"));
     AngelSword->SetupAttachment(GetMesh(),TEXT("Weapon_r")); AngelSword->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-    static ConstructorHelpers::FObjectFinder<USkeletalMesh> WingL(TEXT("/Game/GhostLady_S2/Meshes/Wings/SK_Wing_L.SK_Wing_L"));
-    static ConstructorHelpers::FObjectFinder<USkeletalMesh> WingR(TEXT("/Game/GhostLady_S2/Meshes/Wings/SK_Wing_R.SK_Wing_R"));
-    static ConstructorHelpers::FClassFinder<UAnimInstance> WingAnim(TEXT("/Game/GhostLady_S2/Animations/In-Place/Wings/Wings_AnimBP"));
-    static ConstructorHelpers::FObjectFinder<USkeletalMesh> LongSword(TEXT("/Game/GhostLady_S2/Meshes/Weapons/SK_LongSword.SK_LongSword"));
-    if(WingL.Succeeded()) AngelWingLeft->SetSkeletalMesh(WingL.Object);
-    if(WingR.Succeeded()) AngelWingRight->SetSkeletalMesh(WingR.Object);
-    if(WingAnim.Succeeded()){AngelWingLeft->SetAnimInstanceClass(WingAnim.Class);AngelWingRight->SetAnimInstanceClass(WingAnim.Class);}
-    if(LongSword.Succeeded()) AngelSword->SetSkeletalMesh(LongSword.Object);
-    static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> SwordAttackAsset(TEXT("/Game/GhostLady_S2/Animations/RootMotion/Knight/Anim_Knight_Attack2.Anim_Knight_Attack2"));
-    static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> WingAttackAsset(TEXT("/Game/GhostLady_S2/Animations/RootMotion/FlyingAttack/Anim_Flying_FlashFwd.Anim_Flying_FlashFwd"));
-    static ConstructorHelpers::FObjectFinder<UAnimSequenceBase> CasterAttackAsset(TEXT("/Game/GhostLady_S2/Animations/RootMotion/FlyingAttack/Anim_Flying_CallOfHeaven.Anim_Flying_CallOfHeaven"));
-    if(SwordAttackAsset.Succeeded()) SwordBossAttack=SwordAttackAsset.Object;
-    if(WingAttackAsset.Succeeded()) WingBossAttack=WingAttackAsset.Object;
-    if(CasterAttackAsset.Succeeded()) CasterBossAttack=CasterAttackAsset.Object;
-    // 300 m render range and 500 m network relevancy range. No HiddenInGame is used.
-    GetMesh()->SetCullDistance(30000.f);
+    // Demo/debug phase: keep enemies visible regardless of camera distance.
+    GetMesh()->SetCullDistance(0.f);
     GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
-    NetCullDistanceSquared = FMath::Square(50000.f);
+    bAlwaysRelevant = true;
 }
 
 UAbilitySystemComponent* ACVADEnemyCharacter::GetAbilitySystemComponent() const
@@ -95,11 +80,8 @@ void ACVADEnemyCharacter::OnRep_BossRole(){ApplyBossRoleVisuals();OnBossRoleChan
 void ACVADEnemyCharacter::ApplyBossRoleVisuals()
 {
     if(!bIsBoss || !GetMesh()) return;
-    static USkeletalMesh* Bodies[3]={
-        LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/GhostLady_S2/Meshes/Characters/Combines/SK_GhostLadyS2_A.SK_GhostLadyS2_A")),
-        LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/GhostLady_S2/Meshes/Characters/Combines/SK_GhostLadyS2_B.SK_GhostLadyS2_B")),
-        LoadObject<USkeletalMesh>(nullptr,TEXT("/Game/GhostLady_S2/Meshes/Characters/Combines/SK_GhostLadyS2D_B.SK_GhostLadyS2D_B"))};
-    if(Bodies[BossRole] && GetMesh()->GetSkeletalMeshAsset()!=Bodies[BossRole]) GetMesh()->SetSkeletalMesh(Bodies[BossRole]);
+    USkeletalMesh* RoleMesh=BossRoleBodyMeshes.IsValidIndex(BossRole) ? BossRoleBodyMeshes[BossRole] : nullptr;
+    if(RoleMesh && GetMesh()->GetSkeletalMeshAsset()!=RoleMesh) GetMesh()->SetSkeletalMesh(RoleMesh);
     if(AngelSword) AngelSword->SetVisibility(BossRole==0,true);
 }
 
@@ -107,11 +89,30 @@ void ACVADEnemyCharacter::BeginPlay()
 {
     Super::BeginPlay();
     bIsBoss = bIsBoss || BalanceRowName == TEXT("Boss");
+    if(GetMesh())
+    {
+        GetMesh()->SetHiddenInGame(false);
+        GetMesh()->SetVisibility(true,true);
+        GetMesh()->SetComponentTickEnabled(true);
+        if(!bIsBoss && MinionIdleAnimation && !GetMesh()->GetAnimClass())
+        {
+            // Do not evaluate Manny's AnimBP on the SkeletonArmy skeleton. A compatible
+            // single-node pose guarantees the spawned mesh is rendered until a dedicated
+            // SkeletonArmy locomotion AnimBP is authored.
+            GetMesh()->PlayAnimation(MinionIdleAnimation,true);
+        }
+        UE_LOG(LogTemp,Log,TEXT("Enemy visual Mesh=%s Anim=%s Hidden=%s Visible=%s Location=%s Scale=%s"),
+            *GetNameSafe(GetMesh()->GetSkeletalMeshAsset()),*GetNameSafe(MinionIdleAnimation),
+            GetMesh()->bHiddenInGame?TEXT("true"):TEXT("false"),GetMesh()->IsVisible()?TEXT("true"):TEXT("false"),
+            *GetActorLocation().ToCompactString(),*GetActorScale3D().ToCompactString());
+    }
     if(AngelWingLeft) AngelWingLeft->SetVisibility(bIsBoss,true);
     if(AngelWingRight) AngelWingRight->SetVisibility(bIsBoss,true);
     if(AngelSword) AngelSword->SetVisibility(false,true);
-    if(GetMesh()) GetMesh()->SetCullDistance(VisualCullDistance);
-    NetCullDistanceSquared = FMath::Square(NetworkCullDistance);
+    if(GetMesh()) GetMesh()->SetCullDistance(0.f);
+    for(USkeletalMeshComponent* Component : {AngelWingLeft,AngelWingRight,AngelSword})
+        if(Component) Component->SetCullDistance(0.f);
+    bAlwaysRelevant = true;
     if(!AbilitySystemComponent)
     {
         UE_LOG(LogTemp,Error,TEXT("Enemy %s has no AbilitySystemComponent; destroying invalid spawn"),*GetName());
@@ -156,6 +157,18 @@ void ACVADEnemyCharacter::BeginPlay()
 
 void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& ChangeData)
 {
+    if(HasAuthority() && !bIsBoss && bOneHitKillMinion && !bDeathHandled && !bApplyingOneHitKill &&
+        ChangeData.NewValue < ChangeData.OldValue && ChangeData.NewValue > 0.f)
+    {
+        // Musou-demo rule: every valid player hit defeats a regular soldier. Keep
+        // this on the enemy instead of inflating player damage so bosses retain
+        // their intended health and phase balance.
+        bApplyingOneHitKill=true;
+        AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetHealthAttribute(),0.f);
+        bApplyingOneHitKill=false;
+        UE_LOG(LogTemp,Log,TEXT("Minion %s converted valid hit to one-hit defeat"),*GetName());
+        return;
+    }
     if (HasAuthority() && bIsBoss)
     {
         for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)

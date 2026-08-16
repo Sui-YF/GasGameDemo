@@ -6,6 +6,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "GenericPlatform/GenericPlatformHttp.h"
 
 ACVADGameMode::ACVADGameMode()
 {
@@ -39,8 +40,8 @@ FString ACVADGameMode::InitNewPlayer(APlayerController* NewPlayerController,cons
 {
     const FString Error=Super::InitNewPlayer(NewPlayerController,UniqueId,Options,Portal);
     if(!Error.IsEmpty() || !NewPlayerController) return Error;
-    FString RequestedName=UGameplayStatics::ParseOption(Options,TEXT("PlayerName")).TrimStartAndEnd().Left(20);
-    bool bValid=RequestedName.Len()>=2;
+    FString RequestedName=FGenericPlatformHttp::UrlDecode(UGameplayStatics::ParseOption(Options,TEXT("PlayerName"))).TrimStartAndEnd().Left(20);
+    bool bValid=RequestedName.Len()>=1;
     for(const TCHAR C : RequestedName) if(C<32 || C==TEXT('/') || C==TEXT('\\')) { bValid=false; break; }
     if(!bValid) RequestedName=FString::Printf(TEXT("Player%d"),GetWorld()->GetGameState()?GetWorld()->GetGameState()->PlayerArray.Num():1);
     NewPlayerController->ServerChangeName(RequestedName);

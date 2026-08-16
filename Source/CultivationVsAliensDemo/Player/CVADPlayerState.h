@@ -39,7 +39,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Progression") int32 GetExperienceToNextLevel() const { return PlayerLevel * 100; }
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 PlayerLevel = 1;
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 Experience = 0;
-    UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 SkillPoints = 0;
+    /** Demo budget: enough points to test every purchasable skill in one session. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Replicated, Category="Progression") int32 SkillPoints = 99;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_LobbyReady, Category="Lobby") bool bLobbyReady = false;
     UFUNCTION(BlueprintCallable, Category="Lobby") void SetLobbyReady(bool bReady);
     void RequestRestoreProfile(int32 InLevel, int32 InExperience, int32 InSkillPoints,

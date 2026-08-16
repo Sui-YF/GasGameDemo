@@ -41,4 +41,5 @@ private:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot4Text;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UTextBlock> SkillSlot5Text;
     TWeakObjectPtr<ACVADBattleDirector> BattleDirector;
+    UPROPERTY(EditDefaultsOnly, Category="HUD|Boss", meta=(ClampMin="500.0")) float BossHUDDisplayRadius = 5000.f;
 };

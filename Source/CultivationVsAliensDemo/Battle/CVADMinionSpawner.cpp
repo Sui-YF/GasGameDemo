@@ -9,6 +9,7 @@
 #include "Engine/DataTable.h"
 #include "Battle/CVADBattleDirector.h"
 #include "EngineUtils.h"
+#include "Components/SkeletalMeshComponent.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCVADSpawner, Log, All);
 
@@ -61,9 +62,11 @@ void ACVADMinionSpawner::ApplyProfile()
     UDataTable* Profiles = LoadObject<UDataTable>(nullptr, TEXT("/Game/CVAD/Data/DT_SpawnerProfiles.DT_SpawnerProfiles"));
     const FCVADSpawnerProfileRow* Row = Profiles ? Profiles->FindRow<FCVADSpawnerProfileRow>(ProfileRowName, TEXT("SpawnerBeginPlay")) : nullptr;
     if (!Row) return;
-    SpawnInterval = Row->SpawnInterval;
-    MaxAlive = Row->MaxAlive;
-    KillQuota = Row->KillQuota;
+    // Demo pacing: keep a visible crowd on screen and reach the boss encounter
+    // quickly enough for a short playtest, regardless of stale table values.
+    SpawnInterval = FMath::Min(Row->SpawnInterval,0.65f);
+    MaxAlive = FMath::Max(Row->MaxAlive,8);
+    KillQuota = Row->KillQuota > 0 ? FMath::Min(Row->KillQuota,12) : 12;
     bRequirePlayerInside = Row->bRequirePlayerInside;
 }
 
@@ -164,7 +167,9 @@ void ACVADMinionSpawner::TrySpawnMinion()
         SpawnedMinions.Add(Minion);
         AliveCount = SpawnedMinions.Num();
         ForceNetUpdate();
-        UE_LOG(LogCVADSpawner, Log, TEXT("Spawner %s created %s Alive=%d"), *GetName(), *GetNameSafe(Minion), AliveCount);
+        UE_LOG(LogCVADSpawner, Log, TEXT("Spawner %s created %s Alive=%d Location=%s Mesh=%s"), *GetName(),
+            *GetNameSafe(Minion), AliveCount,*Minion->GetActorLocation().ToCompactString(),
+            *GetNameSafe(Minion->GetMesh()?Minion->GetMesh()->GetSkeletalMeshAsset():nullptr));
     }
 }
 
@@ -210,10 +215,20 @@ FVector ACVADMinionSpawner::FindSpawnLocation() const
 {
     const FVector Extent = ActivationBox->GetScaledBoxExtent();
     const FVector Origin = ActivationBox->GetComponentLocation();
-    const FVector RandomPoint = Origin + FVector(
-        FMath::FRandRange(-Extent.X, Extent.X),
-        FMath::FRandRange(-Extent.Y, Extent.Y),
-        0.f);
+    FVector SpawnOrigin=Origin;
+    float BestDistanceSq=TNumericLimits<float>::Max();
+    for(const TWeakObjectPtr<AActor>& PlayerActor : PlayersInside)
+    {
+        const ACVADCharacter* Player=Cast<ACVADCharacter>(PlayerActor.Get());
+        if(!Player) continue;
+        const float DistanceSq=FVector::DistSquared2D(Player->GetActorLocation(),Origin);
+        if(DistanceSq<BestDistanceSq){BestDistanceSq=DistanceSq;SpawnOrigin=Player->GetActorLocation();}
+    }
+    const FVector2D Direction=FVector2D(FMath::FRandRange(-1.f,1.f),FMath::FRandRange(-1.f,1.f)).GetSafeNormal();
+    const float Distance=FMath::FRandRange(500.f,900.f);
+    FVector RandomPoint=SpawnOrigin+FVector(Direction.X*Distance,Direction.Y*Distance,0.f);
+    RandomPoint.X=FMath::Clamp(RandomPoint.X,Origin.X-Extent.X,Origin.X+Extent.X);
+    RandomPoint.Y=FMath::Clamp(RandomPoint.Y,Origin.Y-Extent.Y,Origin.Y+Extent.Y);
     FNavLocation NavLocation;
     if (const UNavigationSystemV1* Nav = FNavigationSystem::GetCurrent<UNavigationSystemV1>(GetWorld()))
     {

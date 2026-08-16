@@ -41,14 +41,19 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> SwordBossAttack;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> WingBossAttack;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> CasterBossAttack;
+    /** Skeleton-compatible fallback animation for minions that do not ship with an AnimBP. Configure in the enemy Blueprint. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Minion|Animation") TObjectPtr<class UAnimSequenceBase> MinionIdleAnimation;
+    /** Optional body mesh for each boss role (0 Sword, 1 Wing Vanguard, 2 Celestial Caster). Configure in the enemy Blueprint. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Visual") TArray<TObjectPtr<class USkeletalMesh>> BossRoleBodyMeshes;
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayBossAttack(int32 AttackRole);
     /** Rendering/network distance only. The actor is never hidden or destroyed by this setting. */
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="1000.0"))
-    float VisualCullDistance = 30000.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="0.0"))
+    float VisualCullDistance = 0.f;
 
-    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="1000.0"))
-    float NetworkCullDistance = 50000.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="0.0"))
+    float NetworkCullDistance = 0.f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat") float HitReactionImpulse = 420.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Demo") bool bOneHitKillMinion = true;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0")) float MinionHitStunDuration = 0.28f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss", meta=(ClampMin="0.0")) float BossPhaseHitStunDuration = 0.55f;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HitStunned, Category="Combat") bool bHitStunned = false;
@@ -79,6 +84,7 @@ protected:
     void EvaluateBossPhase(float CurrentHealth);
     void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
     bool bDeathHandled = false;
+    bool bApplyingOneHitKill = false;
     TWeakObjectPtr<ACVADMinionSpawner> SpawnSource;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;

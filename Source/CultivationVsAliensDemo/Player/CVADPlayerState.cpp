@@ -33,6 +33,7 @@ UAbilitySystemComponent* ACVADPlayerState::GetAbilitySystemComponent() const
 void ACVADPlayerState::BeginPlay()
 {
     Super::BeginPlay();
+    if(HasAuthority()) SkillPoints=FMath::Max(SkillPoints,99);
     UDataTable* BalanceTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/CVAD/Data/DT_PlayerBalance.DT_PlayerBalance"));
     const FCVADPlayerBalanceRow* Row = BalanceTable ? BalanceTable->FindRow<FCVADPlayerBalanceRow>(TEXT("Default"), TEXT("PlayerStateBeginPlay")) : nullptr;
     if (Row && AbilitySystemComponent)
@@ -200,7 +201,7 @@ void ACVADPlayerState::RestoreProfileAuthority(int32 InLevel, int32 InExperience
     if (!HasAuthority() || !AbilitySystemComponent || !AttributeSet) return;
     PlayerLevel = FMath::Clamp(InLevel, 1, 50);
     Experience = FMath::Clamp(InExperience, 0, GetExperienceToNextLevel() - 1);
-    SkillPoints = FMath::Clamp(InSkillPoints, 0, 100);
+    SkillPoints = FMath::Max(FMath::Clamp(InSkillPoints, 0, 999), 99);
     UDataTable* SkillTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/CVAD/Data/DT_Skills.DT_Skills"));
     UnlockedSkillRows.Reset();
     if (SkillTable)

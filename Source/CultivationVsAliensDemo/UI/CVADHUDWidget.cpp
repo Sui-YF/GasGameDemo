@@ -62,7 +62,11 @@ void UCVADHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     }
     if(!BattleDirector.IsValid()&&GetWorld()) for(TActorIterator<ACVADBattleDirector> It(GetWorld());It;++It){BattleDirector=*It;break;}
     if(!BattleDirector.IsValid()) return;
-    if(DefeatText) DefeatText->SetText(FText::Format(NSLOCTEXT("CVAD","HUDKills","击破 {0}/{1}"),BattleDirector->DefeatCount,BattleDirector->FrontlineDefeatTarget));
+    if(DefeatText)
+    {
+        DefeatText->SetText(FText::Format(NSLOCTEXT("CVAD","HUDKills","击破 {0}/{1}"),BattleDirector->DefeatCount,BattleDirector->FrontlineDefeatTarget));
+        DefeatText->SetVisibility(BattleDirector->BattlePhase==ECVADBattlePhase::Frontline?ESlateVisibility::Visible:ESlateVisibility::Collapsed);
+    }
     FText Phase=NSLOCTEXT("CVAD","HUDRally","集结准备");
     if(BattleDirector->BattlePhase==ECVADBattlePhase::Frontline) Phase=NSLOCTEXT("CVAD","HUDFrontline","肃清骷髅军团");
     else if(BattleDirector->BattlePhase==ECVADBattlePhase::Boss) Phase=FText::Format(NSLOCTEXT("CVAD","HUDBossObjective","击败天穹三使（剩余 {0}）"),BattleDirector->BossesRemaining);
@@ -71,7 +75,7 @@ void UCVADHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     bool bNearBoss=false;
     if(LocalCharacter && BattleDirector->BattlePhase==ECVADBattlePhase::Boss)
         for(const ACVADEnemyCharacter* Boss : BattleDirector->RegisteredBosses)
-            if(IsValid(Boss) && FVector::DistSquared(LocalCharacter->GetActorLocation(),Boss->GetActorLocation())<=FMath::Square(3500.f)){bNearBoss=true;break;}
+            if(IsValid(Boss) && FVector::DistSquared(LocalCharacter->GetActorLocation(),Boss->GetActorLocation())<=FMath::Square(BossHUDDisplayRadius)){bNearBoss=true;break;}
     const bool bBoss=bNearBoss && BattleDirector->BossesRemaining>0;
     if(BossHealthBar){BossHealthBar->SetPercent(BattleDirector->BossMaxHealth>0.f?BattleDirector->BossHealth/BattleDirector->BossMaxHealth:0.f);BossHealthBar->SetVisibility(bBoss?ESlateVisibility::Visible:ESlateVisibility::Collapsed);}
     if(BossNameText){BossNameText->SetText(FText::Format(NSLOCTEXT("CVAD","HUDBossName","天穹三使 · 剑使 / 翼卫 / 天术师  [{0}/3]"),BattleDirector->BossesRemaining));BossNameText->SetVisibility(bBoss?ESlateVisibility::Visible:ESlateVisibility::Collapsed);}

@@ -10,6 +10,7 @@ class USpringArmComponent;
 class UCameraComponent;
 class UGameplayAbility;
 class USkeletalMeshComponent;
+class USkeletalMesh;
 class UAnimSequenceBase;
 class USphereComponent;
 struct FOnAttributeChangeData;
@@ -30,7 +31,7 @@ public:
     void ActivateCombatInput(ECVADAbilityInput Input);
 
     /** Server-authoritative action animation, replicated to listen-server clients. */
-    void PlayReplicatedActionAnimation(UAnimSequenceBase* Animation);
+    void PlayReplicatedActionAnimation(UAnimSequenceBase* Animation, bool bUseRootMotion = false);
     void HandleActionAnimationFinished();
     void QueueAttackDamage(float Damage, float Distance, float Radius, bool bAllowMultipleTargets);
     void HandleAttackHitNotify();
@@ -49,13 +50,14 @@ protected:
     void InitializeAbilityActorInfo();
     void GrantDefaultAbilities();
     void BindEquipment();
+    bool MergeAppearanceMeshes(const TArray<USkeletalMesh*>& SourceMeshes);
 
     UFUNCTION() void HandleEquipmentChanged(const FCVADEquipmentLoadout& NewLoadout);
     void SetEquipmentMesh(USkeletalMeshComponent* Component, FName ItemId);
-    UFUNCTION(NetMulticast, Unreliable) void MulticastPlayActionAnimation(UAnimSequenceBase* Animation);
-    void PlayActionAnimationLocal(UAnimSequenceBase* Animation);
+    UFUNCTION(NetMulticast, Unreliable) void MulticastPlayActionAnimation(UAnimSequenceBase* Animation, bool bUseRootMotion);
+    void PlayActionAnimationLocal(UAnimSequenceBase* Animation, bool bUseRootMotion);
     void RestoreLocomotionAnimation();
-    void StartActionAnimation(UAnimSequenceBase* Animation);
+    void StartActionAnimation(UAnimSequenceBase* Animation, bool bUseRootMotion);
     void FinishActionAnimationDeferred();
     void OpenComboInputWindow();
     void HandlePlayerHealthChanged(const FOnAttributeChangeData& ChangeData);
@@ -89,6 +91,8 @@ protected:
     FTimerHandle InvulnerabilityTimer;
     void EndTemporaryInvulnerability();
     UPROPERTY(Transient) TObjectPtr<UAnimSequenceBase> PendingActionAnimation;
+    bool bPendingActionUsesRootMotion = false;
+    bool bCurrentActionUsesRootMotion = false;
     bool bActionAnimationPlaying = false;
     bool bComboInputWindowOpen = false;
     bool bCombatInputLocked = false;
@@ -98,6 +102,8 @@ protected:
     float PendingAttackRadius = 0.f;
     bool bPendingAttackHitsMultiple = false;
     bool bPendingAttackDamage = false;
+    UPROPERTY(EditDefaultsOnly, Category="Combat|Demo", meta=(ClampMin="1.0")) float DemoAttackDistanceMultiplier = 1.25f;
+    UPROPERTY(EditDefaultsOnly, Category="Combat|Demo", meta=(ClampMin="1.0")) float DemoAttackRadiusMultiplier = 1.5f;
 
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_FlyingSwordMode, Category="Combat|Stance") bool bFlyingSwordMode = false;
     UFUNCTION() void OnRep_FlyingSwordMode();
@@ -120,6 +126,7 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Equipment") TObjectPtr<USkeletalMeshComponent> HandsMesh;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Equipment") TObjectPtr<USkeletalMeshComponent> HairMesh;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Equipment") TObjectPtr<USkeletalMeshComponent> HatMesh;
+    UPROPERTY(Transient) TObjectPtr<USkeletalMesh> RuntimeMergedAppearanceMesh;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon") TObjectPtr<USkeletalMeshComponent> SwordMesh;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon") TObjectPtr<USkeletalMeshComponent> FlyingSwordMeshLeft;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon") TObjectPtr<USkeletalMeshComponent> FlyingSwordMeshRight;

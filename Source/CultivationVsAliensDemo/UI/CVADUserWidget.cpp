@@ -49,19 +49,42 @@ void UCVADUserWidget::NativeConstruct()
     BIND_OUTFIT("Button_HatPrev",OutfitHatPrev);BIND_OUTFIT("Button_HatNext",OutfitHatNext);BIND_OUTFIT("Button_UpperPrev",OutfitUpperPrev);BIND_OUTFIT("Button_UpperNext",OutfitUpperNext);
     BIND_OUTFIT("Button_HandsPrev",OutfitHandsPrev);BIND_OUTFIT("Button_HandsNext",OutfitHandsNext);BIND_OUTFIT("Button_LowerPrev",OutfitLowerPrev);BIND_OUTFIT("Button_LowerNext",OutfitLowerNext);
     BIND_OUTFIT("Button_FeetPrev",OutfitFeetPrev);BIND_OUTFIT("Button_FeetNext",OutfitFeetNext);
+    BIND_OUTFIT("Button_CameraZoomIn",OutfitCameraZoomIn);BIND_OUTFIT("Button_CameraZoomOut",OutfitCameraZoomOut);
+    BIND_OUTFIT("Button_CameraUp",OutfitCameraMoveUp);BIND_OUTFIT("Button_CameraDown",OutfitCameraMoveDown);BIND_OUTFIT("Button_CameraReset",OutfitCameraReset);
     #undef BIND_OUTFIT
     if (UButton* Button=Cast<UButton>(GetWidgetFromName(TEXT("Button_OutfitConfirm")))) Button->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleOutfitConfirm);
     if(GetClass()->GetName().Contains(TEXT("WBP_OutfitSelect")))
     {
         for(int32 I=0;I<7;++I)if(GConfig)GConfig->GetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),I),PreviewOutfitParts[I],GGameUserSettingsIni);
+        if(GConfig)
+        {
+            float CameraDistance=static_cast<float>(OutfitPreviewCameraLocation.X);
+            float CameraHeight=static_cast<float>(OutfitPreviewCameraLocation.Z);
+            GConfig->GetFloat(TEXT("CVAD.OutfitPreview"),TEXT("CameraDistance"),CameraDistance,GGameUserSettingsIni);
+            GConfig->GetFloat(TEXT("CVAD.OutfitPreview"),TEXT("CameraHeight"),CameraHeight,GGameUserSettingsIni);
+            if(FMath::IsNearlyEqual(CameraDistance,140.f) && FMath::IsNearlyEqual(CameraHeight,92.f))
+            {CameraDistance=210.f;CameraHeight=78.f;}
+            OutfitPreviewCameraLocation.X=CameraDistance;
+            OutfitPreviewCameraLocation.Z=CameraHeight;
+        }
         if(UViewport* Preview=Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_OutfitPreview"))))
         {
-            Preview->SetBackgroundColor(FLinearColor(0.015f,0.025f,0.05f,1.f)); Preview->SetLightIntensity(5.f); Preview->SetSkyIntensity(1.5f);
-            Preview->SetViewLocation(FVector(190.f,0.f,105.f)); Preview->SetViewRotation(FRotator(0.f,180.f,0.f));
-            OutfitPreviewCharacter=Cast<ACVADCharacter>(Preview->Spawn(ACVADCharacter::StaticClass()));
+            Preview->SetBackgroundColor(FLinearColor(0.015f,0.025f,0.05f,1.f)); Preview->SetLightIntensity(1.2f); Preview->SetSkyIntensity(3.f);
+            Preview->SetViewLocation(OutfitPreviewCameraLocation); Preview->SetViewRotation(OutfitPreviewCameraRotation);
+            TSubclassOf<ACVADCharacter> PreviewClass=LoadClass<ACVADCharacter>(nullptr,TEXT("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter.BP_LanfangCharacter_C"));
+            UClass* SpawnClass=PreviewClass.Get() ? PreviewClass.Get() : ACVADCharacter::StaticClass();
+            OutfitPreviewCharacter=Cast<ACVADCharacter>(Preview->Spawn(SpawnClass));
             if(OutfitPreviewCharacter) OutfitPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
         }
+        ApplyOutfitPreviewCamera(false);
         RefreshOutfitPreview();
+    }
+    if(UEditableTextBox* NameInput=Cast<UEditableTextBox>(GetWidgetFromName(TEXT("Input_PlayerName"))))
+    {
+        NameInput->SetIsReadOnly(false);
+        NameInput->SetClearKeyboardFocusOnCommit(false);
+        NameInput->SetSelectAllTextWhenFocused(false);
+        NameInput->SetKeyboardFocus();
     }
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot0")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot0);
     if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SaveSlot1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SaveSlot1);
@@ -243,6 +266,42 @@ void UCVADUserWidget::HandleConfirmNameClicked()
 }
 
 void UCVADUserWidget::ChangeOutfitPart(int32 P,int32 D){static const int32 Counts[]={3,4,6,5,3,3,7};PreviewOutfitParts[P]=(PreviewOutfitParts[P]+D+Counts[P])%Counts[P];RefreshOutfitPreview();}
+
+void UCVADUserWidget::ApplyOutfitPreviewCamera(bool bSaveSettings)
+{
+    OutfitPreviewCameraLocation.X=FMath::Clamp(OutfitPreviewCameraLocation.X,70.f,400.f);
+    OutfitPreviewCameraLocation.Z=FMath::Clamp(OutfitPreviewCameraLocation.Z,20.f,220.f);
+    if(UViewport* Preview=Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_OutfitPreview"))))
+    {
+        // Keep the preview presentation front-facing. The character turns toward the
+        // camera and the camera targets the upper torso, so zoom/height adjustments
+        // never leave the model side-on or looking past it.
+        const FVector CharacterOrigin=OutfitPreviewCharacter ? OutfitPreviewCharacter->GetActorLocation() : FVector::ZeroVector;
+        if(OutfitPreviewCharacter)
+        {
+            const FVector FacingDirection=(OutfitPreviewCameraLocation-CharacterOrigin).GetSafeNormal2D();
+            if(!FacingDirection.IsNearlyZero()) OutfitPreviewCharacter->SetActorRotation(FacingDirection.Rotation());
+        }
+        const FVector LookAtPoint=CharacterOrigin+FVector(0.f,0.f,78.f);
+        OutfitPreviewCameraRotation=(LookAtPoint-OutfitPreviewCameraLocation).Rotation();
+        Preview->SetViewLocation(OutfitPreviewCameraLocation);
+        Preview->SetViewRotation(OutfitPreviewCameraRotation);
+    }
+    if(UTextBlock* Status=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_OutfitStatus"))))
+        Status->SetText(FText::FromString(FString::Printf(TEXT("镜头距离 %.0f  高度 %.0f"),OutfitPreviewCameraLocation.X,OutfitPreviewCameraLocation.Z)));
+    if(bSaveSettings && GConfig)
+    {
+        GConfig->SetFloat(TEXT("CVAD.OutfitPreview"),TEXT("CameraDistance"),OutfitPreviewCameraLocation.X,GGameUserSettingsIni);
+        GConfig->SetFloat(TEXT("CVAD.OutfitPreview"),TEXT("CameraHeight"),OutfitPreviewCameraLocation.Z,GGameUserSettingsIni);
+        GConfig->Flush(false,GGameUserSettingsIni);
+    }
+}
+
+void UCVADUserWidget::OutfitCameraZoomIn(){OutfitPreviewCameraLocation.X-=15.f;ApplyOutfitPreviewCamera(true);}
+void UCVADUserWidget::OutfitCameraZoomOut(){OutfitPreviewCameraLocation.X+=15.f;ApplyOutfitPreviewCamera(true);}
+void UCVADUserWidget::OutfitCameraMoveUp(){OutfitPreviewCameraLocation.Z+=10.f;ApplyOutfitPreviewCamera(true);}
+void UCVADUserWidget::OutfitCameraMoveDown(){OutfitPreviewCameraLocation.Z-=10.f;ApplyOutfitPreviewCamera(true);}
+void UCVADUserWidget::OutfitCameraReset(){OutfitPreviewCameraLocation=FVector(210.f,0.f,78.f);OutfitPreviewCameraRotation=FRotator(0.f,180.f,0.f);ApplyOutfitPreviewCamera(true);}
 #define OUTFIT_PAIR(N,I) void UCVADUserWidget::Outfit##N##Prev(){ChangeOutfitPart(I,-1);} void UCVADUserWidget::Outfit##N##Next(){ChangeOutfitPart(I,1);}
 OUTFIT_PAIR(Head,0) OUTFIT_PAIR(Hair,1) OUTFIT_PAIR(Hat,2) OUTFIT_PAIR(Upper,3) OUTFIT_PAIR(Hands,4) OUTFIT_PAIR(Lower,5) OUTFIT_PAIR(Feet,6)
 #undef OUTFIT_PAIR
@@ -340,7 +399,7 @@ void UCVADUserWidget::SubmitPlayerName(const FString& NewName)
 bool UCVADUserWidget::ValidatePlayerName(const FString& NewName, FText& FailureReason) const
 {
     const FString CleanName = NewName.TrimStartAndEnd();
-    if (CleanName.Len() < 2) { FailureReason = NSLOCTEXT("CVAD", "NameShort", "名称至少需要 2 个字符"); return false; }
+    if (CleanName.Len() < 1) { FailureReason = NSLOCTEXT("CVAD", "NameShort", "请输入玩家名称"); return false; }
     if (CleanName.Len() > 20) { FailureReason = NSLOCTEXT("CVAD", "NameLong", "名称不能超过 20 个字符"); return false; }
     for (const TCHAR Character : CleanName)
         if (Character < 32 || Character == TEXT('/') || Character == TEXT('\\'))
@@ -377,7 +436,18 @@ void UCVADUserWidget::EquipSelectedSkill()
     if(!CachedPlayerState || SelectedSkillRow.IsNone()) return;
     UDataTable* Table=LoadObject<UDataTable>(nullptr,TEXT("/Game/CVAD/Data/DT_Skills.DT_Skills"));
     const FCVADSkillRow* Row=Table?Table->FindRow<FCVADSkillRow>(SelectedSkillRow,TEXT("EquipSelectedUI")):nullptr;
-    if(!Row || (!Row->bUnlockedByDefault && !CachedPlayerState->IsSkillUnlocked(SelectedSkillRow))) return;
+    if(!Row) return;
+    if(!Row->bUnlockedByDefault && !CachedPlayerState->IsSkillUnlocked(SelectedSkillRow))
+    {
+        FText Failure;
+        if(CachedPlayerState->CanUnlockSkill(SelectedSkillRow,Failure))
+        {
+            CachedPlayerState->RequestSpendSkillPoint(SelectedSkillRow);
+            if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillCost")))) T->SetText(NSLOCTEXT("CVAD","SkillPurchaseRequested","已购买；再次点击即可装配"));
+        }
+        else if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillCost")))) T->SetText(Failure);
+        return;
+    }
     CachedPlayerState->EquipSkill(Row->SkillSlot,SelectedSkillRow);
     if(GConfig)
     {
@@ -420,7 +490,9 @@ void UCVADUserWidget::RefreshSkillDetails()
     if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_Level")))) T->SetText(FText::Format(NSLOCTEXT("CVAD","SkillLevelUI","等级 {0}"),Level));
     if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillPoints")))) T->SetText(FText::Format(NSLOCTEXT("CVAD","SkillPointsUI","技能点 {0}"),CachedPlayerState->SkillPoints));
     if(UButton* EquipButton=Cast<UButton>(GetWidgetFromName(TEXT("Button_EquipSelected"))))
-        EquipButton->SetIsEnabled(bUnlocked&&!bEquipped&&LoadedAbilityClass!=nullptr);
+        EquipButton->SetIsEnabled(((bUnlocked&&!bEquipped)||bCanUnlock)&&LoadedAbilityClass!=nullptr);
+    if(UTextBlock* EquipLabel=Cast<UTextBlock>(GetWidgetFromName(TEXT("Label_Button_EquipSelected"))))
+        EquipLabel->SetText(bUnlocked?NSLOCTEXT("CVAD","EquipSkillButton","装配所选技能"):NSLOCTEXT("CVAD","BuySkillButton","购买所选技能"));
     if(UTextBlock* EquippedText=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_EquippedSkills"))))
     {
         static const TCHAR* SlotNames[]={TEXT("普通攻击"),TEXT("重攻击"),TEXT("闪避"),TEXT("飞剑技能"),TEXT("战斗姿态")};
@@ -540,12 +612,12 @@ bool UCVADUserWidget::LoadProfileFromSlot(int32 SlotIndex)
     {
         UE_LOG(LogTemp, Log, TEXT("Starting battle from profile Slot=%d"), SlotIndex);
         const FString CleanName=Save->PlayerDisplayName.TrimStartAndEnd().Left(20);
-        if(GConfig && CleanName.Len()>=2)
+        if(GConfig && CleanName.Len()>=1)
         {
             GConfig->SetString(TEXT("CVAD.Profile"),TEXT("PlayerName"),*CleanName,GGameUserSettingsIni);
             GConfig->Flush(false,GGameUserSettingsIni);
         }
-        const FString Options=TEXT("LoadProfile=1?PlayerName=")+FGenericPlatformHttp::UrlEncode(CleanName.Len()>=2?CleanName:TEXT("Player"));
+        const FString Options=TEXT("LoadProfile=1?PlayerName=")+FGenericPlatformHttp::UrlEncode(CleanName.Len()>=1?CleanName:TEXT("Player"));
         UGameplayStatics::OpenLevel(this, TEXT("L_CastleBattle"), true, Options);
         return true;
     }

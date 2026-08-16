@@ -3,6 +3,7 @@
 #include "Kismet/KismetSystemLibrary.h"
 #include "GameFramework/PlayerController.h"
 #include "Player/CVADPlayerController.h"
+#include "Character/CVADCharacter.h"
 #include "Battle/CVADBattleDirector.h"
 #include "Save/CVADSaveGame.h"
 #include "EngineUtils.h"
@@ -38,7 +39,18 @@ void UCVADMenuWidget::NativeConstruct()
     if (Button_ReturnLobby) Button_ReturnLobby->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnClicked);
     if (Button_ReturnMainMenu) Button_ReturnMainMenu->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleReturnClicked);
     bool bWon = false; float Time = 0.f; int32 Defeats = 0; int32 XP = 0;
-    if (GetBattleResultData(bWon, Time, Defeats, XP))
+    const ACVADCharacter* Character=Cast<ACVADCharacter>(GetOwningPlayerPawn());
+    const bool bPlayerCurrentlyDown=Character && Character->IsPlayerDown();
+    if (bPlayerCurrentlyDown)
+    {
+        if(Text_ResultTitle) Text_ResultTitle->SetText(NSLOCTEXT("CVAD","PlayerDead","你已死亡"));
+        if(Text_ClearTime) Text_ClearTime->SetText(NSLOCTEXT("CVAD","DeathChoice","选择复活将重新开始本次战斗"));
+        if(Text_Defeats) Text_Defeats->SetText(FText::GetEmpty());
+        if(Text_BossResult) Text_BossResult->SetText(FText::GetEmpty());
+        if(Text_ExperienceEarned) Text_ExperienceEarned->SetText(FText::GetEmpty());
+        if(UTextBlock* RetryLabel=Cast<UTextBlock>(GetWidgetFromName(TEXT("Label_Button_Retry")))) RetryLabel->SetText(NSLOCTEXT("CVAD","Respawn","复活"));
+    }
+    else if (GetBattleResultData(bWon, Time, Defeats, XP))
     {
         if (Text_ResultTitle) Text_ResultTitle->SetText(bWon ? NSLOCTEXT("CVAD", "ResultVictory", "修仙者胜利") : NSLOCTEXT("CVAD", "ResultDefeat", "战斗失败"));
         const int32 Minutes = FMath::FloorToInt(Time / 60.f);
@@ -126,7 +138,7 @@ FString UCVADMenuWidget::GetConfiguredPlayerName() const
     FString Name=TEXT("Player");
     if(GConfig) GConfig->GetString(TEXT("CVAD.Profile"),TEXT("PlayerName"),Name,GGameUserSettingsIni);
     Name=Name.TrimStartAndEnd().Left(20);
-    return Name.Len()>=2?Name:TEXT("Player");
+    return Name.Len()>=1?Name:TEXT("Player");
 }
 
 bool UCVADMenuWidget::EnsureConfiguredPlayerName(int32 PendingAction,const FString& Address)

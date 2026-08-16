@@ -24,6 +24,7 @@
 #include "AbilitySystem/Effects/CVADDamageEffect.h"
 #include "GameplayTagsManager.h"
 #include "Misc/ConfigCacheIni.h"
+#include "SkeletalMeshMerge.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCVADAbilityInput, Log, All);
 
@@ -78,7 +79,7 @@ ACVADCharacter::ACVADCharacter()
     if (SwordAsset.Succeeded()) SwordMesh->SetSkeletalMesh(SwordAsset.Object);
 
     static ConstructorHelpers::FClassFinder<UAnimInstance> FlyingSwordAnimBP(
-        TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSword"));
+        TEXT("/Game/CVAD/Animations/ABP_LanFang_FlyingSwordV2"));
     if (FlyingSwordAnimBP.Succeeded()) FlyingSwordAnimClass = FlyingSwordAnimBP.Class;
 
     FlyingSwordMeshLeft = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("FlyingSwordLeft"));
@@ -122,14 +123,16 @@ void ACVADCharacter::BeginPlay()
         {TEXT("BotBodies/SK_BotBody_A"),TEXT("BotBodies/SK_BotBody_B"),TEXT("BotBodies/SK_BotBody_Base")},
         {TEXT("Shoes/SK_Boots_A"),TEXT("Shoes/SK_Boots_B"),TEXT("Shoes/SK_Feet"),TEXT("Shoes/SK_Shoes_A"),TEXT("Shoes/SK_Shoes_B"),TEXT("Shoes/SK_Shoes_C"),TEXT("Shoes/SK_Shoes_D")}};
     USkeletalMeshComponent* Parts[]={HeadMesh,HairMesh,HatMesh,UpperBodyMesh,HandsMesh,LowerBodyMesh,FeetMesh};
+    TArray<USkeletalMesh*> AppearanceMeshes;
     for(int32 Part=0;Part<7;++Part)
     {
         int32 Index=0;if(GConfig)GConfig->GetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),Part),Index,GGameUserSettingsIni);
         Index=FMath::Clamp(Index,0,Choices[Part].Num()-1); const FString& Relative=Choices[Part][Index];
         USkeletalMesh* PartMesh=nullptr;if(!Relative.IsEmpty()){const FString Asset=FString::Printf(TEXT("/Game/LanFang/Meshes/Characters/Separates/%s.%s"),*Relative,*FPaths::GetBaseFilename(Relative));PartMesh=LoadObject<USkeletalMesh>(nullptr,*Asset);}
-        Parts[Part]->SetSkeletalMesh(PartMesh);Parts[Part]->SetLeaderPoseComponent(GetMesh());Parts[Part]->SetHiddenInGame(false);Parts[Part]->SetVisibility(true,true);Parts[Part]->SetComponentTickEnabled(false);
+        Parts[Part]->SetSkeletalMesh(PartMesh);Parts[Part]->SetLeaderPoseComponent(GetMesh(),true,false);Parts[Part]->SetHiddenInGame(false);Parts[Part]->SetVisibility(true,true);Parts[Part]->SetComponentTickEnabled(false);
+        if(PartMesh) AppearanceMeshes.Add(PartMesh);
     }
-    GetMesh()->SetVisibility(false,false);
+    if(!MergeAppearanceMeshes(AppearanceMeshes)) GetMesh()->SetVisibility(false,false);
 }
 
 UAbilitySystemComponent* ACVADCharacter::GetAbilitySystemComponent() const
@@ -149,6 +152,7 @@ void ACVADCharacter::ApplyAppearanceSelection(const int32 PartIndices[7])
         {TEXT("BotBodies/SK_BotBody_A"),TEXT("BotBodies/SK_BotBody_B"),TEXT("BotBodies/SK_BotBody_Base")},
         {TEXT("Shoes/SK_Boots_A"),TEXT("Shoes/SK_Boots_B"),TEXT("Shoes/SK_Feet"),TEXT("Shoes/SK_Shoes_A"),TEXT("Shoes/SK_Shoes_B"),TEXT("Shoes/SK_Shoes_C"),TEXT("Shoes/SK_Shoes_D")}};
     USkeletalMeshComponent* Parts[]={HeadMesh,HairMesh,HatMesh,UpperBodyMesh,HandsMesh,LowerBodyMesh,FeetMesh};
+    TArray<USkeletalMesh*> AppearanceMeshes;
     for(int32 Part=0;Part<7;++Part)
     {
         const int32 Index=FMath::Clamp(PartIndices[Part],0,Choices[Part].Num()-1);
@@ -160,11 +164,55 @@ void ACVADCharacter::ApplyAppearanceSelection(const int32 PartIndices[7])
             PartMesh=LoadObject<USkeletalMesh>(nullptr,*Asset);
         }
         Parts[Part]->SetSkeletalMesh(PartMesh);
-        Parts[Part]->SetLeaderPoseComponent(GetMesh());
+        Parts[Part]->SetLeaderPoseComponent(GetMesh(),true,false);
         Parts[Part]->SetHiddenInGame(false);
         Parts[Part]->SetVisibility(true,true);
+        if(PartMesh) AppearanceMeshes.Add(PartMesh);
     }
-    GetMesh()->SetVisibility(false,false);
+    if(!MergeAppearanceMeshes(AppearanceMeshes)) GetMesh()->SetVisibility(false,false);
+}
+
+bool ACVADCharacter::MergeAppearanceMeshes(const TArray<USkeletalMesh*>& SourceMeshes)
+{
+    if(!GetMesh() || SourceMeshes.Num()<2) return false;
+    USkeletalMesh* Merged=NewObject<USkeletalMesh>(this,NAME_None,RF_Transient);
+    const TArray<FSkelMeshMergeSectionMapping> SectionMappings;
+    FSkeletalMeshMerge Merger(Merged,SourceMeshes,SectionMappings,0,EMeshBufferAccess::Default,
+        static_cast<const FSkelMeshMergeUVTransformMapping*>(nullptr));
+    if(!Merger.DoMerge())
+    {
+        UE_LOG(LogCVADAbilityInput,Warning,TEXT("Runtime appearance merge failed; using leader-pose components"));
+        return false;
+    }
+    // FSkeletalMeshMerge builds render and reference-skeleton data but does not
+    // automatically retain the source USkeleton asset. Without it the AnimBP can
+    // be instantiated, yet dynamic montages fail their skeleton compatibility test.
+    USkeleton* AppearanceSkeleton=nullptr;
+    for(USkeletalMesh* SourceMesh : SourceMeshes)
+    {
+        if(SourceMesh && SourceMesh->GetSkeleton()) { AppearanceSkeleton=SourceMesh->GetSkeleton(); break; }
+    }
+    if(!AppearanceSkeleton)
+    {
+        UE_LOG(LogCVADAbilityInput,Error,TEXT("Runtime appearance merge produced no compatible Skeleton"));
+        return false;
+    }
+    Merged->SetSkeleton(AppearanceSkeleton);
+    RuntimeMergedAppearanceMesh=Merged;
+    GetMesh()->SetSkeletalMesh(RuntimeMergedAppearanceMesh);
+    GetMesh()->SetHiddenInGame(false);
+    GetMesh()->SetVisibility(true,true);
+    for(USkeletalMeshComponent* Part : {HeadMesh,HairMesh,HatMesh,UpperBodyMesh,HandsMesh,LowerBodyMesh,FeetMesh})
+    {
+        if(!Part) continue;
+        Part->SetHiddenInGame(true);
+        Part->SetVisibility(false,true);
+    }
+    RestoreLocomotionAnimation();
+    GetMesh()->InitAnim(true);
+    UE_LOG(LogCVADAbilityInput,Log,TEXT("Merged %d appearance meshes; AnimClass=%s Skeleton=%s"),
+        SourceMeshes.Num(),*GetNameSafe(GetMesh()->GetAnimClass()),*GetNameSafe(RuntimeMergedAppearanceMesh->GetSkeleton()));
+    return true;
 }
 
 void ACVADCharacter::PossessedBy(AController* NewController)
@@ -182,7 +230,9 @@ void ACVADCharacter::HandlePlayerHealthChanged(const FOnAttributeChangeData& Cha
     if (!HasAuthority() || bPlayerDown || ChangeData.NewValue >= ChangeData.OldValue) return;
     if (ChangeData.NewValue > 0.f)
     {
-        BeginPlayerHitStun(PlayerHitStunDuration);
+        // Attacks have poise for this musou-style demo: damage still applies, but
+        // an enemy poke cannot cancel the current skill or corrupt its combo queue.
+        if(!bActionAnimationPlaying) BeginPlayerHitStun(PlayerHitStunDuration);
         BeginTemporaryInvulnerability(PostHitInvulnerabilityDuration);
         return;
     }
@@ -437,18 +487,18 @@ void ACVADCharacter::ApplySprintSpeed()
     if (GetCharacterMovement()) GetCharacterMovement()->MaxWalkSpeed = bSprinting ? SprintSpeed : WalkSpeed;
 }
 
-void ACVADCharacter::PlayReplicatedActionAnimation(UAnimSequenceBase* Animation)
+void ACVADCharacter::PlayReplicatedActionAnimation(UAnimSequenceBase* Animation, bool bUseRootMotion)
 {
     if (!Animation) return;
-    if (HasAuthority()) MulticastPlayActionAnimation(Animation);
+    if (HasAuthority()) MulticastPlayActionAnimation(Animation,bUseRootMotion);
 }
 
 void ACVADCharacter::QueueAttackDamage(float Damage, float Distance, float Radius, bool bAllowMultipleTargets)
 {
     if (!HasAuthority()) return;
     PendingAttackDamage = Damage;
-    PendingAttackDistance = Distance;
-    PendingAttackRadius = Radius;
+    PendingAttackDistance = Distance * DemoAttackDistanceMultiplier;
+    PendingAttackRadius = Radius * DemoAttackRadiusMultiplier;
     bPendingAttackHitsMultiple = bAllowMultipleTargets;
     bPendingAttackDamage = Damage > 0.f;
 }
@@ -487,12 +537,12 @@ void ACVADCharacter::HandleAttackHitNotify()
     }
 }
 
-void ACVADCharacter::MulticastPlayActionAnimation_Implementation(UAnimSequenceBase* Animation)
+void ACVADCharacter::MulticastPlayActionAnimation_Implementation(UAnimSequenceBase* Animation, bool bUseRootMotion)
 {
-    PlayActionAnimationLocal(Animation);
+    PlayActionAnimationLocal(Animation,bUseRootMotion);
 }
 
-void ACVADCharacter::PlayActionAnimationLocal(UAnimSequenceBase* Animation)
+void ACVADCharacter::PlayActionAnimationLocal(UAnimSequenceBase* Animation, bool bUseRootMotion)
 {
     if (!Animation || !GetMesh()) return;
     if (bActionAnimationPlaying)
@@ -500,20 +550,22 @@ void ACVADCharacter::PlayActionAnimationLocal(UAnimSequenceBase* Animation)
         if (!PendingActionAnimation)
         {
             PendingActionAnimation = Animation;
+            bPendingActionUsesRootMotion = bUseRootMotion;
             UE_LOG(LogCVADAbilityInput, Log, TEXT("Queued one action animation %s"), *GetNameSafe(Animation));
         }
         return;
     }
-    StartActionAnimation(Animation);
+    StartActionAnimation(Animation,bUseRootMotion);
 }
 
-void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
+void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation, bool bUseRootMotion)
 {
     if (!Animation || !GetMesh()) return;
     // Slot playback keeps the locomotion AnimBP alive, so CharacterMovement, jumping and
     // stance-specific state machines continue evaluating underneath the action animation.
     RestoreLocomotionAnimation();
     bActionAnimationPlaying = true;
+    bCurrentActionUsesRootMotion = bUseRootMotion;
     bComboInputWindowOpen = false;
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
@@ -538,7 +590,9 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation)
     if (ActionInstance)
     {
         // Attacks animate the body but CharacterMovement remains authoritative, allowing move/jump during attacks.
-        ActionInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+        ActionInstance->SetRootMotionMode(bUseRootMotion
+            ? ERootMotionMode::RootMotionFromMontagesOnly
+            : ERootMotionMode::IgnoreRootMotion);
     }
     const float Duration = FMath::Max(0.05f, DynamicMontage->GetPlayLength());
     GetWorldTimerManager().ClearTimer(ComboWindowTimer);
@@ -592,10 +646,13 @@ void ACVADCharacter::FinishActionAnimationDeferred()
     if (PendingActionAnimation)
     {
         UAnimSequenceBase* Next = PendingActionAnimation;
+        const bool bNextUsesRootMotion=bPendingActionUsesRootMotion;
         PendingActionAnimation = nullptr;
-        StartActionAnimation(Next);
+        bPendingActionUsesRootMotion=false;
+        StartActionAnimation(Next,bNextUsesRootMotion);
         return;
     }
+    bCurrentActionUsesRootMotion=false;
     RestoreLocomotionAnimation();
     bCombatInputLocked = false;
     const int32 NextInput = BufferedCombatInput;

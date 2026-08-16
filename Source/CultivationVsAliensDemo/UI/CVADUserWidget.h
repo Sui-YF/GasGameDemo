@@ -44,6 +44,10 @@ public:
 protected:
     UPROPERTY(BlueprintReadOnly, Category="UI") TObjectPtr<ACVADPlayerState> CachedPlayerState;
 
+    /** Outfit preview camera, editable in WBP_OutfitSelect Class Defaults. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Outfit Preview") FVector OutfitPreviewCameraLocation = FVector(210.f, 0.f, 78.f);
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Outfit Preview") FRotator OutfitPreviewCameraRotation = FRotator(0.f, 180.f, 0.f);
+
     UFUNCTION(BlueprintImplementableEvent, Category="UI") void OnPlayerDataReady();
 private:
     UFUNCTION() void HandlePauseResumeClicked();
@@ -60,6 +64,12 @@ private:
     UFUNCTION() void OutfitHandsPrev(); UFUNCTION() void OutfitHandsNext(); UFUNCTION() void OutfitLowerPrev(); UFUNCTION() void OutfitLowerNext();
     UFUNCTION() void OutfitFeetPrev(); UFUNCTION() void OutfitFeetNext();
     UFUNCTION() void HandleOutfitConfirm();
+    UFUNCTION() void OutfitCameraZoomIn();
+    UFUNCTION() void OutfitCameraZoomOut();
+    UFUNCTION() void OutfitCameraMoveUp();
+    UFUNCTION() void OutfitCameraMoveDown();
+    UFUNCTION() void OutfitCameraReset();
+    void ApplyOutfitPreviewCamera(bool bSaveSettings);
     void RefreshOutfitPreview();
     UFUNCTION() void HandleSettingsApplyClicked();
     UFUNCTION() void HandleSettingsResetClicked();
