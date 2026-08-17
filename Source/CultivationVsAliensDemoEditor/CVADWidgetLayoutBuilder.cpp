@@ -222,7 +222,8 @@ namespace
             // half-connected state.
             if (!Blend || !Slot)
             {
-                return InsertCombatSlot(Blueprint);
+                if (!InsertCombatSlot(Blueprint)) return false;
+                return RepairCombatSlotGraph(Blueprint);
             }
 
             UEdGraphPin* BasePosePin = Blend->FindPin(TEXT("BasePose"));
@@ -267,6 +268,37 @@ namespace
             UEdGraphPin* BlendOutput = Blend->FindPin(TEXT("Pose"));
             if (!BasePosePin || !BlendPosePin || !BlendOutput) return false;
 
+            UAnimGraphNode_Slot* FullBodySlot = nullptr;
+            for (UEdGraphNode* Node : Graph->Nodes)
+            {
+                UAnimGraphNode_Slot* Candidate = Cast<UAnimGraphNode_Slot>(Node);
+                if (Candidate && Candidate->Node.SlotName == TEXT("FullBody"))
+                {
+                    FullBodySlot = Candidate;
+                    break;
+                }
+            }
+            if (!FullBodySlot)
+            {
+                FGraphNodeCreator<UAnimGraphNode_Slot> FullBodyCreator(*Graph);
+                FullBodySlot = FullBodyCreator.CreateNode();
+                FullBodySlot->Node.SlotName = TEXT("FullBody");
+                FullBodySlot->Node.bAlwaysUpdateSourcePose = true;
+                FullBodySlot->NodePosX = Root->NodePosX - 720;
+                FullBodySlot->NodePosY = Root->NodePosY + 280;
+                FullBodyCreator.Finalize();
+            }
+
+            UEdGraphPin* FullBodyInput = nullptr;
+            UEdGraphPin* FullBodyOutput = nullptr;
+            for (UEdGraphPin* Pin : FullBodySlot->Pins)
+            {
+                if (!Pin) continue;
+                if (Pin->Direction == EGPD_Input && !FullBodyInput) FullBodyInput = Pin;
+                if (Pin->Direction == EGPD_Output && !FullBodyOutput) FullBodyOutput = Pin;
+            }
+            if (!FullBodyInput || !FullBodyOutput) return false;
+
             UEdGraphPin* SlotInput = nullptr;
             UEdGraphPin* SlotOutput = nullptr;
             for (UEdGraphPin* Pin : Slot->Pins)
@@ -289,6 +321,8 @@ namespace
             BlendPosePin->BreakAllPinLinks();
             SlotInput->BreakAllPinLinks();
             SlotOutput->BreakAllPinLinks();
+            FullBodyInput->BreakAllPinLinks();
+            FullBodyOutput->BreakAllPinLinks();
 
             const bool bConnected = LocomotionOutput->LinkedTo.Num() == 0
                 || (LocomotionOutput->Direction == EGPD_Output
@@ -299,7 +333,8 @@ namespace
             LocomotionOutput->MakeLinkTo(SlotInput);
             LocomotionOutput->MakeLinkTo(BasePosePin);
             SlotOutput->MakeLinkTo(BlendPosePin);
-            BlendOutput->MakeLinkTo(RootInput);
+            BlendOutput->MakeLinkTo(FullBodyInput);
+            FullBodyOutput->MakeLinkTo(RootInput);
 
             UE_LOG(LogTemp, Display, TEXT("CVAD repaired combat slot graph in %s at bone %s"),
                 *GetNameSafe(Blueprint), *UpperBodyBone.ToString());

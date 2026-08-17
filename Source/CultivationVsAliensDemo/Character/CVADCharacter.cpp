@@ -571,15 +571,16 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation, bool bUs
         ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
     GetWorldTimerManager().ClearTimer(ActionAnimationTimer);
     UAnimInstance* ActionInstance = GetMesh()->GetAnimInstance();
+    const FName ActionSlot = bUseRootMotion ? FullBodyAnimationSlot : CombatAnimationSlot;
     UAnimMontage* DynamicMontage = ActionInstance
         ? ActionInstance->PlaySlotAnimationAsDynamicMontage(
-            Animation, CombatAnimationSlot, CombatBlendInTime, CombatBlendOutTime, 1.f, 1)
+            Animation, ActionSlot, CombatBlendInTime, CombatBlendOutTime, 1.f, 1)
         : nullptr;
     if (!DynamicMontage)
     {
         UE_LOG(LogCVADAbilityInput, Error,
             TEXT("Could not play %s through slot %s. Check the active AnimBP contains the slot node."),
-            *GetNameSafe(Animation), *CombatAnimationSlot.ToString());
+            *GetNameSafe(Animation), *ActionSlot.ToString());
         bActionAnimationPlaying = false;
         if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
             ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
@@ -607,7 +608,7 @@ void ACVADCharacter::StartActionAnimation(UAnimSequenceBase* Animation, bool bUs
     // Notify is authoritative for sequencing. This delayed timer is only a safety fallback.
     GetWorldTimerManager().SetTimer(ActionAnimationTimer, this, &ThisClass::HandleActionAnimationFinished, Duration + 0.15f, false);
     UE_LOG(LogCVADAbilityInput, Log, TEXT("Playing replicated action montage %s Slot=%s Duration=%.2f"),
-        *GetNameSafe(Animation), *CombatAnimationSlot.ToString(), Duration);
+        *GetNameSafe(Animation), *ActionSlot.ToString(), Duration);
 }
 
 void ACVADCharacter::OpenComboInputWindow()
