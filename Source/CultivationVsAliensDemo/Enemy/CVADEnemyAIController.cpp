@@ -191,7 +191,14 @@ void ACVADEnemyAIController::AttackTarget(AActor* TargetActor)
     Enemy->GetAbilitySystemComponent()->AddLooseGameplayTag(
         UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
     Enemy->BeginShapedAttackTelegraph(PendingAttackCenter, PendingAttackRadius, Windup, PendingAttackShape, PendingAttackDirection);
-    Enemy->PlayBossAttackAnimation();
+    if (Enemy->IsBoss())
+    {
+        Enemy->PlayBossAttackAnimation();
+    }
+    else
+    {
+        Enemy->PlayMinionAttackAnimation();
+    }
     GetWorldTimerManager().SetTimer(AttackWindupTimer, this, &ThisClass::ResolveTelegraphedAttack, Windup, false);
     UE_LOG(LogTemp, Log, TEXT("Enemy %s attack telegraph Center=%s Radius=%.0f Windup=%.2f"),
         *GetNameSafe(Enemy), *PendingAttackCenter.ToCompactString(), PendingAttackRadius, Windup);

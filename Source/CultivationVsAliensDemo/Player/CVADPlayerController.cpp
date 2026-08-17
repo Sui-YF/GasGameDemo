@@ -288,6 +288,11 @@ void ACVADPlayerController::BeginPlay()
 void ACVADPlayerController::ApplyStartupProfile()
 {
     const FString SlotName = UCVADUserWidget::GetProfileSlotName(UCVADUserWidget::GetLastUsedProfileSlot());
+    if (!UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+    {
+        UE_LOG(LogCVADInput, Log, TEXT("No startup profile exists; using default profile."));
+        return;
+    }
     UCVADSaveGame* Save = Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
     ACVADPlayerState* PS = GetPlayerState<ACVADPlayerState>();
     if (!Save || !PS) { UE_LOG(LogCVADInput, Warning, TEXT("Startup profile load failed")); return; }

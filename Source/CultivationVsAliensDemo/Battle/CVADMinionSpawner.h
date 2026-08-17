@@ -53,6 +53,7 @@ private:
     TSet<TWeakObjectPtr<AActor>> PlayersInside;
     TSet<TWeakObjectPtr<ACVADEnemyCharacter>> SpawnedMinions;
     FTimerHandle SpawnTimer;
+    bool bExplicitStart = false;
 
     void TrySpawnMinion();
     void RefreshSpawningState();
@@ -61,4 +62,6 @@ private:
     void ApplyProfile();
     void ScanPlayersAndRefresh();
     void CompleteSpawner();
+    void SpawnBossesIfReady();
+    FTimerHandle BossSpawnRetryTimer;
 };

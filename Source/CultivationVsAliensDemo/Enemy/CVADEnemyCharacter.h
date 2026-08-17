@@ -30,6 +30,9 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginAttackTelegraph(const FVector& Center, float Radius, float Duration);
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginShapedAttackTelegraph(const FVector& Center, float Radius, float Duration, int32 Shape, const FVector& Direction);
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void EndAttackTelegraph();
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionAttackAnimation();
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionHitAnimation();
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionDeathAnimation();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss|Animation") void PlayBossAttackAnimation();
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnEnemyDamaged(float DamageAmount);
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnHitStunChanged(bool bNewHitStunned);
@@ -44,13 +47,21 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> CasterBossAttack;
     /** Skeleton-compatible fallback animation for minions that do not ship with an AnimBP. Configure in the enemy Blueprint. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Minion|Animation") TObjectPtr<class UAnimSequenceBase> MinionIdleAnimation;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Minion|Animation") TObjectPtr<class UAnimSequenceBase> MinionAttackAnimation;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Minion|Animation") TObjectPtr<class UAnimSequenceBase> MinionHitAnimation;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Minion|Animation") TObjectPtr<class UAnimSequenceBase> MinionDeathAnimation;
     /** Optional body mesh for each boss role (0 Sword, 1 Wing Vanguard, 2 Celestial Caster). Configure in the enemy Blueprint. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Visual") TArray<TObjectPtr<class USkeletalMesh>> BossRoleBodyMeshes;
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayBossAttack(int32 AttackRole);
+    UFUNCTION(NetMulticast, Unreliable) void MulticastPlayMinionAnimation(int32 AnimationType);
     void RestoreBossAnimationBlueprint();
+    void RestoreMinionAnimationBlueprint();
     UPROPERTY(Transient)
     TSubclassOf<UAnimInstance> BossAnimationClass;
+    UPROPERTY(Transient)
+    TSubclassOf<UAnimInstance> MinionAnimationClass;
     FTimerHandle BossAnimationRestoreTimer;
+    FTimerHandle MinionAnimationRestoreTimer;
     /** Rendering/network distance only. The actor is never hidden or destroyed by this setting. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="0.0"))
     float VisualCullDistance = 0.f;
@@ -61,6 +72,9 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat|Demo") bool bOneHitKillMinion = true;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Combat", meta=(ClampMin="0.0")) float MinionHitStunDuration = 0.28f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss", meta=(ClampMin="0.0")) float BossPhaseHitStunDuration = 0.55f;
+    /** Bosses move noticeably slower than regular minions so their telegraphed attacks remain readable. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss", meta=(ClampMin="0.1", ClampMax="1.0"))
+    float BossMoveSpeedMultiplier = 0.55f;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HitStunned, Category="Combat") bool bHitStunned = false;
     UFUNCTION() void OnRep_HitStunned();
     void BeginHitStun(float Duration);

@@ -74,6 +74,7 @@ void ACVADMinionSpawner::ApplyProfile()
 void ACVADMinionSpawner::StartSpawning()
 {
     if (!HasAuthority() || bCompleted || !MinionClass) return;
+    bExplicitStart = true;
     if (!GetWorldTimerManager().IsTimerActive(SpawnTimer))
     {
         UE_LOG(LogCVADSpawner, Log, TEXT("Spawner %s started. MaxAlive=%d KillQuota=%d Interval=%.2f"),
@@ -85,6 +86,7 @@ void ACVADMinionSpawner::StartSpawning()
 void ACVADMinionSpawner::StopSpawning()
 {
     if (!HasAuthority()) return;
+    bExplicitStart = false;
     GetWorldTimerManager().ClearTimer(SpawnTimer);
     UE_LOG(LogCVADSpawner, Log, TEXT("Spawner %s paused. Alive=%d Defeated=%d"), *GetName(), AliveCount, DefeatedCount);
 }
@@ -146,7 +148,7 @@ void ACVADMinionSpawner::RefreshSpawningState()
         if (It->BattlePhase != ECVADBattlePhase::Frontline) { StopSpawning(); return; }
         break;
     }
-    const bool bMaySpawn = !bRequirePlayerInside || PlayersInside.Num() > 0;
+    const bool bMaySpawn = !bRequirePlayerInside || PlayersInside.Num() > 0 || bExplicitStart;
     if (bMaySpawn && (bResumeWhenPlayerReturns || DefeatedCount == 0)) StartSpawning();
     else StopSpawning();
 }
@@ -160,7 +162,7 @@ void ACVADMinionSpawner::TrySpawnMinion()
         break;
     }
     PruneInvalidEntries();
-    if (bRequirePlayerInside && PlayersInside.Num() == 0) { StopSpawning(); return; }
+    if (bRequirePlayerInside && PlayersInside.Num() == 0 && !bExplicitStart) { StopSpawning(); return; }
     if (KillQuota > 0 && DefeatedCount >= KillQuota)
     {
         CompleteSpawner();
@@ -203,23 +205,42 @@ void ACVADMinionSpawner::CompleteSpawner()
     if (!HasAuthority() || bCompleted) return;
     bCompleted = true;
     StopSpawning();
-    ACVADBattleDirector* Director = nullptr;
-    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { Director = *It; break; }
-    const bool bBossStageReady = !Director || Director->IsBossStageReady();
-    if (BossClass && bBossStageReady && (!Director || Director->RegisteredBosses.IsEmpty()))
+    SpawnBossesIfReady();
+    if (BossClass)
     {
-        for(int32 Index=0;Index<3;++Index)
-        {
-            FActorSpawnParameters Params; Params.SpawnCollisionHandlingOverride=ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-            const FVector FormationOffset=BossSpawnOffset+FVector(0.f,(Index-1)*360.f,0.f);
-            ACVADEnemyCharacter* Boss=GetWorld()->SpawnActor<ACVADEnemyCharacter>(BossClass,GetActorTransform().TransformPosition(FormationOffset),GetActorRotation(),Params);
-            if(Boss) Boss->SetBossRole(Index);
-            if(Director && Boss) Director->RegisterBoss(Boss);
-            UE_LOG(LogCVADSpawner,Log,TEXT("Spawner %s spawned Angel Boss %d/3=%s"),*GetName(),Index+1,*GetNameSafe(Boss));
-        }
+        // The final minion defeat is reported to this spawner before the battle
+        // director advances to the Boss phase. Retry briefly so the normal
+        // "kill quota -> boss encounter" path still spawns the bosses.
+        GetWorldTimerManager().SetTimer(BossSpawnRetryTimer, this,
+            &ThisClass::SpawnBossesIfReady, 0.25f, true);
     }
     OnSpawnerCompleted();
     ForceNetUpdate();
+}
+
+void ACVADMinionSpawner::SpawnBossesIfReady()
+{
+    if (!HasAuthority() || !bCompleted || !BossClass) return;
+
+    ACVADBattleDirector* Director = nullptr;
+    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { Director = *It; break; }
+    if (Director && !Director->IsBossStageReady()) return;
+    if (Director && !Director->RegisteredBosses.IsEmpty()) return;
+
+    for (int32 Index = 0; Index < 3; ++Index)
+    {
+        FActorSpawnParameters Params;
+        Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+        const FVector FormationOffset = BossSpawnOffset + FVector(0.f, (Index - 1) * 360.f, 0.f);
+        ACVADEnemyCharacter* Boss = GetWorld()->SpawnActor<ACVADEnemyCharacter>(
+            BossClass, GetActorTransform().TransformPosition(FormationOffset), GetActorRotation(), Params);
+        if (Boss) Boss->SetBossRole(Index);
+        if (Director && Boss) Director->RegisterBoss(Boss);
+        UE_LOG(LogCVADSpawner, Log, TEXT("Spawner %s spawned Angel Boss %d/3=%s"),
+            *GetName(), Index + 1, *GetNameSafe(Boss));
+    }
+
+    GetWorldTimerManager().ClearTimer(BossSpawnRetryTimer);
 }
 
 FVector ACVADMinionSpawner::FindSpawnLocation() const

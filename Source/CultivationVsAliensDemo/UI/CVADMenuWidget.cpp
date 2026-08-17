@@ -73,7 +73,17 @@ void UCVADMenuWidget::NativeConstruct()
 
 void UCVADMenuWidget::NativeTick(const FGeometry& MyGeometry,float InDeltaTime)
 {
-    Super::NativeTick(MyGeometry,InDeltaTime); LobbyRefreshAccumulator+=InDeltaTime;
+    Super::NativeTick(MyGeometry,InDeltaTime);
+    if (Text_PlayerName)
+    {
+        const FString CurrentName = GetConfiguredPlayerName();
+        if (CurrentName != DisplayedPlayerName)
+        {
+            Text_PlayerName->SetText(FText::FromString(FString::Printf(TEXT("玩家：%s"), *CurrentName)));
+            DisplayedPlayerName = CurrentName;
+        }
+    }
+    LobbyRefreshAccumulator+=InDeltaTime;
     if(LobbyRefreshAccumulator>=0.25f){LobbyRefreshAccumulator=0.f;RefreshLobbyDisplay();}
 }
 
@@ -215,7 +225,11 @@ bool UCVADMenuWidget::SaveBattleResult()
     // before adding run statistics to the same profile slot.
     SaveProfileToSlot(GetLastUsedProfileSlot());
     const FString SlotName = GetProfileSlotName(GetLastUsedProfileSlot());
-    UCVADSaveGame* Save = Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
+    UCVADSaveGame* Save = nullptr;
+    if (UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+    {
+        Save = Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
+    }
     if (!Save) Save = Cast<UCVADSaveGame>(UGameplayStatics::CreateSaveGameObject(UCVADSaveGame::StaticClass()));
     if (!Save) return false;
     Save->bHasCompletedDemo = true;

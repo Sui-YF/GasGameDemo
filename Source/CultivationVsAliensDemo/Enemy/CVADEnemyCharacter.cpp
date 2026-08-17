@@ -18,7 +18,9 @@
 #include "DrawDebugHelpers.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Animation/AnimInstance.h"
+#include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
+#include "Animation/Skeleton.h"
 
 ACVADEnemyCharacter::ACVADEnemyCharacter()
 {
@@ -40,6 +42,7 @@ ACVADEnemyCharacter::ACVADEnemyCharacter()
     GetMesh()->SetCullDistance(0.f);
     GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
     bAlwaysRelevant = true;
+    GetCharacterMovement()->bAllowPhysicsRotationDuringAnimRootMotion = true;
 }
 
 UAbilitySystemComponent* ACVADEnemyCharacter::GetAbilitySystemComponent() const
@@ -74,10 +77,34 @@ void ACVADEnemyCharacter::MulticastPlayBossAttack_Implementation(int32 AttackRol
     USkeletalMeshComponent* MeshComponent = GetMesh();
     if (!MeshComponent || !Sequence) return;
 
-    // The imported role meshes use different animation blueprints, so their slot
-    // layouts are not guaranteed to match. Play the configured sequence directly.
     BossAnimationClass = MeshComponent->GetAnimClass();
-    MeshComponent->PlayAnimation(Sequence, false);
+    UAnimInstance* AnimInstance = MeshComponent->GetAnimInstance();
+    bool bPlayedRootMotionMontage = false;
+    if (AnimInstance)
+    {
+        AnimInstance->SetRootMotionMode(ERootMotionMode::RootMotionFromMontagesOnly);
+        UAnimMontage* BossMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
+            Sequence, FAnimSlotGroup::DefaultSlotName, 0.1f, 0.25f, 1.f, 1);
+        if (BossMontage)
+        {
+            bPlayedRootMotionMontage = true;
+            UE_LOG(LogTemp, Verbose, TEXT("Boss %s is playing root-motion montage %s"),
+                *GetName(), *GetNameSafe(Sequence));
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning,
+                TEXT("Boss %s AnimBP has no DefaultSlot; falling back to in-place animation %s"),
+                *GetName(), *GetNameSafe(Sequence));
+        }
+    }
+
+    if (!bPlayedRootMotionMontage)
+    {
+        // The imported role meshes use different animation blueprints and may not
+        // expose DefaultSlot. Keep the old in-place fallback functional.
+        MeshComponent->PlayAnimation(Sequence, false);
+    }
     GetWorldTimerManager().ClearTimer(BossAnimationRestoreTimer);
     GetWorldTimerManager().SetTimer(BossAnimationRestoreTimer, this,
         &ThisClass::RestoreBossAnimationBlueprint,
@@ -92,6 +119,74 @@ void ACVADEnemyCharacter::RestoreBossAnimationBlueprint()
 
     GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
     GetMesh()->SetAnimInstanceClass(BossAnimationClass);
+    if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+    {
+        AnimInstance->SetRootMotionMode(ERootMotionMode::RootMotionFromEverything);
+    }
+}
+
+void ACVADEnemyCharacter::PlayMinionAttackAnimation()
+{
+    if (HasAuthority() && !bIsBoss) MulticastPlayMinionAnimation(0);
+}
+
+void ACVADEnemyCharacter::PlayMinionHitAnimation()
+{
+    if (HasAuthority() && !bIsBoss) MulticastPlayMinionAnimation(1);
+}
+
+void ACVADEnemyCharacter::PlayMinionDeathAnimation()
+{
+    if (HasAuthority() && !bIsBoss) MulticastPlayMinionAnimation(2);
+}
+
+void ACVADEnemyCharacter::MulticastPlayMinionAnimation_Implementation(int32 AnimationType)
+{
+    if (bIsBoss || !GetMesh()) return;
+
+    UAnimSequenceBase* Sequence = AnimationType == 0
+        ? MinionAttackAnimation
+        : (AnimationType == 1 ? MinionHitAnimation : MinionDeathAnimation);
+    if (!Sequence) return;
+
+    MinionAnimationClass = GetMesh()->GetAnimClass();
+    if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+    {
+        AnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
+        if (AnimInstance->PlaySlotAnimationAsDynamicMontage(
+            Sequence, FAnimSlotGroup::DefaultSlotName, 0.05f, 0.12f, 1.f, 1))
+        {
+            GetWorldTimerManager().ClearTimer(MinionAnimationRestoreTimer);
+            GetWorldTimerManager().SetTimer(MinionAnimationRestoreTimer, this,
+                &ThisClass::RestoreMinionAnimationBlueprint,
+                FMath::Max(Sequence->GetPlayLength(), 0.1f) + 0.1f, false);
+            return;
+        }
+    }
+
+    GetMesh()->PlayAnimation(Sequence, false);
+    GetWorldTimerManager().ClearTimer(MinionAnimationRestoreTimer);
+    GetWorldTimerManager().SetTimer(MinionAnimationRestoreTimer, this,
+        &ThisClass::RestoreMinionAnimationBlueprint,
+        FMath::Max(Sequence->GetPlayLength(), 0.1f) + 0.1f, false);
+}
+
+void ACVADEnemyCharacter::RestoreMinionAnimationBlueprint()
+{
+    if (!GetMesh()) return;
+    if (MinionAnimationClass)
+    {
+        GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+        GetMesh()->SetAnimInstanceClass(MinionAnimationClass);
+        if (UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance())
+        {
+            AnimInstance->SetRootMotionMode(ERootMotionMode::RootMotionFromEverything);
+        }
+    }
+    else if (MinionIdleAnimation)
+    {
+        GetMesh()->PlayAnimation(MinionIdleAnimation, true);
+    }
 }
 
 void ACVADEnemyCharacter::OnRep_BossRole(){ApplyBossRoleVisuals();OnBossRoleChanged(BossRole);}
@@ -160,6 +255,10 @@ void ACVADEnemyCharacter::BeginPlay()
         AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetMaxHealthAttribute(), Row->MaxHealth);
         AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetHealthAttribute(), Row->MaxHealth);
         GetCharacterMovement()->MaxWalkSpeed = Row->MoveSpeed;
+        if (bIsBoss)
+        {
+            GetCharacterMovement()->MaxWalkSpeed *= BossMoveSpeedMultiplier;
+        }
         if (ACVADEnemyAIController* EnemyController = Cast<ACVADEnemyAIController>(GetController()))
         {
             EnemyController->ConfigureCombat(Row->AttackDamage, Row->AttackInterval);
@@ -205,18 +304,22 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
         OnEnemyDamaged(ChangeData.OldValue - ChangeData.NewValue);
         if (HasAuthority() && !bIsBoss)
         {
-            BeginHitStun(MinionHitStunDuration);
-            AActor* NearestPlayer = nullptr;
-            float BestSq = TNumericLimits<float>::Max();
-            for (TActorIterator<ACVADCharacter> It(GetWorld()); It; ++It)
+            if (ChangeData.NewValue > 0.f)
             {
-                const float Sq = FVector::DistSquared(It->GetActorLocation(), GetActorLocation());
-                if (Sq < BestSq) { BestSq = Sq; NearestPlayer = *It; }
-            }
-            if (NearestPlayer)
-            {
-                const FVector Away = (GetActorLocation() - NearestPlayer->GetActorLocation()).GetSafeNormal2D();
-                LaunchCharacter(Away * HitReactionImpulse + FVector(0.f, 0.f, 110.f), true, true);
+                PlayMinionHitAnimation();
+                BeginHitStun(MinionHitStunDuration);
+                AActor* NearestPlayer = nullptr;
+                float BestSq = TNumericLimits<float>::Max();
+                for (TActorIterator<ACVADCharacter> It(GetWorld()); It; ++It)
+                {
+                    const float Sq = FVector::DistSquared(It->GetActorLocation(), GetActorLocation());
+                    if (Sq < BestSq) { BestSq = Sq; NearestPlayer = *It; }
+                }
+                if (NearestPlayer)
+                {
+                    const FVector Away = (GetActorLocation() - NearestPlayer->GetActorLocation()).GetSafeNormal2D();
+                    LaunchCharacter(Away * HitReactionImpulse + FVector(0.f, 0.f, 110.f), true, true);
+                }
             }
         }
     }
@@ -227,6 +330,7 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
     if (!HasAuthority() || bDeathHandled || ChangeData.NewValue > 0.f) return;
     bDeathHandled = true;
     if (ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(GetController())) AI->CancelPendingAttack();
+    if (!bIsBoss) PlayMinionDeathAnimation();
     if (bIsBoss) for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->CompleteBossBattle(this); break; }
     if (SpawnSource.IsValid()) SpawnSource->NotifySpawnedMinionDefeated(this);
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
@@ -241,7 +345,10 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
         if (ACVADPlayerState* RewardPlayerState = It->Get() ? It->Get()->GetPlayerState<ACVADPlayerState>() : nullptr)
             RewardPlayerState->AddExperience(ExperienceReward);
     }
-    SetLifeSpan(0.05f);
+    const float DeathDuration = (!bIsBoss && MinionDeathAnimation)
+        ? FMath::Max(MinionDeathAnimation->GetPlayLength(), 0.1f) + 0.15f
+        : 0.05f;
+    SetLifeSpan(DeathDuration);
 }
 
 void ACVADEnemyCharacter::EvaluateBossPhase(float CurrentHealth)

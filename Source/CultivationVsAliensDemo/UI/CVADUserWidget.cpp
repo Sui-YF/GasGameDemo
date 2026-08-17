@@ -571,7 +571,11 @@ bool UCVADUserWidget::SaveProfileToSlot(int32 SlotIndex)
     if (!CachedPlayerState) return false;
     SlotIndex = FMath::Clamp(SlotIndex, 0, 2);
     const FString SlotName = GetProfileSlotName(SlotIndex);
-    UCVADSaveGame* Save = Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
+    UCVADSaveGame* Save = nullptr;
+    if (UGameplayStatics::DoesSaveGameExist(SlotName, 0))
+    {
+        Save = Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(SlotName, 0));
+    }
     if (!Save) Save = Cast<UCVADSaveGame>(UGameplayStatics::CreateSaveGameObject(UCVADSaveGame::StaticClass()));
     if (!Save) return false;
     Save->SaveVersion = 2;
@@ -604,6 +608,7 @@ bool UCVADUserWidget::LoadProfile()
 bool UCVADUserWidget::LoadProfileFromSlot(int32 SlotIndex)
 {
     SlotIndex=FMath::Clamp(SlotIndex,0,2);
+    if (!UGameplayStatics::DoesSaveGameExist(GetProfileSlotName(SlotIndex), 0)) return false;
     UCVADSaveGame* Save = Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(GetProfileSlotName(SlotIndex), 0));
     if (!Save) return false;
     const bool bMainMenuMap = GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
@@ -635,6 +640,7 @@ bool UCVADUserWidget::LoadProfileFromSlot(int32 SlotIndex)
 bool UCVADUserWidget::DeleteProfileSlot(int32 SlotIndex) { const bool bDeleted=UGameplayStatics::DeleteGameInSlot(GetProfileSlotName(SlotIndex),0); RefreshSaveSlotPreviews(); return bDeleted; }
 bool UCVADUserWidget::GetProfileSlotInfo(int32 SlotIndex,FString& PlayerName,int32& Level,FString& SavedAt,float& PlayTimeSeconds,bool& bCompleted) const
 {
+    if (!UGameplayStatics::DoesSaveGameExist(GetProfileSlotName(SlotIndex), 0)) return false;
     const UCVADSaveGame* Save=Cast<UCVADSaveGame>(UGameplayStatics::LoadGameFromSlot(GetProfileSlotName(SlotIndex),0));
     if(!Save) return false; PlayerName=Save->PlayerDisplayName; Level=Save->PlayerLevel; SavedAt=Save->SavedAtLocalTime;
     PlayTimeSeconds=Save->TotalPlayTimeSeconds; bCompleted=Save->bHasCompletedDemo; return true;

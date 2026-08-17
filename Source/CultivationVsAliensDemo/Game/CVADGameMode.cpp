@@ -6,6 +6,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/GameStateBase.h"
 #include "Kismet/GameplayStatics.h"
+#include "TimerManager.h"
 #include "GenericPlatform/GenericPlatformHttp.h"
 
 ACVADGameMode::ACVADGameMode()
@@ -19,12 +20,18 @@ void ACVADGameMode::BeginPlay()
 {
     Super::BeginPlay();
     if (GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"))) return;
-    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+    // Spawner profiles are applied in their own BeginPlay. Start on the next tick
+    // so the director reads the demo kill quota instead of the C++ default value.
+    GetWorldTimerManager().SetTimerForNextTick([this]()
     {
-        It->StartBattle();
-        UE_LOG(LogTemp, Log, TEXT("GameMode automatically started battle via %s"), *GetNameSafe(*It));
-        break;
-    }
+        if (!GetWorld()) return;
+        for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+        {
+            It->StartBattle();
+            UE_LOG(LogTemp, Log, TEXT("GameMode automatically started battle via %s"), *GetNameSafe(*It));
+            break;
+        }
+    });
 }
 
 void ACVADGameMode::PreLogin(const FString& Options,const FString& Address,const FUniqueNetIdRepl& UniqueId,FString& ErrorMessage)

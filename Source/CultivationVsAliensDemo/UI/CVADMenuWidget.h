@@ -71,6 +71,7 @@ private:
     FString BuildPlayerTravelOptions(const FString& BaseOptions = TEXT("")) const;
     bool EnsureConfiguredPlayerName(int32 PendingAction, const FString& Address = FString());
     float LobbyRefreshAccumulator = 0.f;
+    FString DisplayedPlayerName;
     UFUNCTION() void HandleRetryClicked();
     UFUNCTION() void HandleReturnClicked();
 };

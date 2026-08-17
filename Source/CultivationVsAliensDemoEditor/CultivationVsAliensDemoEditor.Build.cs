@@ -24,7 +24,9 @@ public class CultivationVsAliensDemoEditor : ModuleRules
             "AnimGraph",
             "AnimGraphRuntime",
             "AIModule",
-            "NavigationSystem"
+            "NavigationSystem",
+            "GameplayAbilities",
+            "GameplayTags"
         });
     }
 }

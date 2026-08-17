@@ -156,7 +156,8 @@ void UCVADCombatAbility::ActivateAbility(
                     AbilityInput == ECVADAbilityInput::FlyingSword ? true : bThisHitMultiple);
             }
             Character->PlayReplicatedActionAnimation(AnimationToPlay,
-                AbilityInput == ECVADAbilityInput::HeavyAttack);
+                AbilityInput == ECVADAbilityInput::HeavyAttack
+                || AbilityInput == ECVADAbilityInput::Dodge);
         }
         UE_LOG(LogCVADCombatAbility, Log, TEXT("Server executing %s Avatar=%s Damage=%.1f Distance=%.1f Radius=%.1f"),
             *GetNameSafe(this), *GetNameSafe(ActorInfo->AvatarActor.Get()), EffectiveDamage, AttackDistance, EffectiveRadius);
