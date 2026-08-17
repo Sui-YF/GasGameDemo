@@ -18,6 +18,7 @@
 #include "GenericPlatform/GenericPlatformHttp.h"
 #include "Components/Slider.h"
 #include "Components/CheckBox.h"
+#include "Components/Viewport.h"
 #include "Components/ComboBoxString.h"
 #include "Components/TextBlock.h"
 #include "Player/CVADPlayerController.h"
@@ -63,13 +64,23 @@ void UCVADUserWidget::NativeConstruct()
             GConfig->GetFloat(TEXT("CVAD.OutfitPreview"),TEXT("CameraDistance"),CameraDistance,GGameUserSettingsIni);
             GConfig->GetFloat(TEXT("CVAD.OutfitPreview"),TEXT("CameraHeight"),CameraHeight,GGameUserSettingsIni);
             if(FMath::IsNearlyEqual(CameraDistance,140.f) && FMath::IsNearlyEqual(CameraHeight,92.f))
-            {CameraDistance=210.f;CameraHeight=78.f;}
+            {CameraDistance=210.f;CameraHeight=35.f;}
+            else if(FMath::IsNearlyEqual(CameraHeight,78.f))
+            {CameraHeight=35.f;}
             OutfitPreviewCameraLocation.X=CameraDistance;
             OutfitPreviewCameraLocation.Z=CameraHeight;
         }
         if(UViewport* Preview=Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_OutfitPreview"))))
         {
-            Preview->SetBackgroundColor(FLinearColor(0.015f,0.025f,0.05f,1.f)); Preview->SetLightIntensity(1.2f); Preview->SetSkyIntensity(3.f);
+            Preview->SetBackgroundColor(FLinearColor(0.01f,0.018f,0.035f,1.f));
+            Preview->SetLightIntensity(1.0f);
+            Preview->SetSkyIntensity(0.f);
+            Preview->SetShowFlag(TEXT("PostProcessing"), false);
+            Preview->SetShowFlag(TEXT("Bloom"), false);
+            Preview->SetShowFlag(TEXT("DepthOfField"), false);
+            Preview->SetShowFlag(TEXT("MotionBlur"), false);
+            Preview->SetShowFlag(TEXT("Fog"), false);
+            Preview->SetShowFlag(TEXT("DynamicShadows"), false);
             Preview->SetViewLocation(OutfitPreviewCameraLocation); Preview->SetViewRotation(OutfitPreviewCameraRotation);
             TSubclassOf<ACVADCharacter> PreviewClass=LoadClass<ACVADCharacter>(nullptr,TEXT("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter.BP_LanfangCharacter_C"));
             UClass* SpawnClass=PreviewClass.Get() ? PreviewClass.Get() : ACVADCharacter::StaticClass();
@@ -282,7 +293,7 @@ void UCVADUserWidget::ApplyOutfitPreviewCamera(bool bSaveSettings)
             const FVector FacingDirection=(OutfitPreviewCameraLocation-CharacterOrigin).GetSafeNormal2D();
             if(!FacingDirection.IsNearlyZero()) OutfitPreviewCharacter->SetActorRotation(FacingDirection.Rotation());
         }
-        const FVector LookAtPoint=CharacterOrigin+FVector(0.f,0.f,78.f);
+        const FVector LookAtPoint=CharacterOrigin+FVector(0.f,0.f,35.f);
         OutfitPreviewCameraRotation=(LookAtPoint-OutfitPreviewCameraLocation).Rotation();
         Preview->SetViewLocation(OutfitPreviewCameraLocation);
         Preview->SetViewRotation(OutfitPreviewCameraRotation);
@@ -301,7 +312,7 @@ void UCVADUserWidget::OutfitCameraZoomIn(){OutfitPreviewCameraLocation.X-=15.f;A
 void UCVADUserWidget::OutfitCameraZoomOut(){OutfitPreviewCameraLocation.X+=15.f;ApplyOutfitPreviewCamera(true);}
 void UCVADUserWidget::OutfitCameraMoveUp(){OutfitPreviewCameraLocation.Z+=10.f;ApplyOutfitPreviewCamera(true);}
 void UCVADUserWidget::OutfitCameraMoveDown(){OutfitPreviewCameraLocation.Z-=10.f;ApplyOutfitPreviewCamera(true);}
-void UCVADUserWidget::OutfitCameraReset(){OutfitPreviewCameraLocation=FVector(210.f,0.f,78.f);OutfitPreviewCameraRotation=FRotator(0.f,180.f,0.f);ApplyOutfitPreviewCamera(true);}
+void UCVADUserWidget::OutfitCameraReset(){OutfitPreviewCameraLocation=FVector(210.f,0.f,35.f);OutfitPreviewCameraRotation=FRotator(0.f,180.f,0.f);ApplyOutfitPreviewCamera(true);}
 #define OUTFIT_PAIR(N,I) void UCVADUserWidget::Outfit##N##Prev(){ChangeOutfitPart(I,-1);} void UCVADUserWidget::Outfit##N##Next(){ChangeOutfitPart(I,1);}
 OUTFIT_PAIR(Head,0) OUTFIT_PAIR(Hair,1) OUTFIT_PAIR(Hat,2) OUTFIT_PAIR(Upper,3) OUTFIT_PAIR(Hands,4) OUTFIT_PAIR(Lower,5) OUTFIT_PAIR(Feet,6)
 #undef OUTFIT_PAIR
