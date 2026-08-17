@@ -33,7 +33,7 @@ public:
     /** Server-authoritative action animation, replicated to listen-server clients. */
     void PlayReplicatedActionAnimation(UAnimSequenceBase* Animation, bool bUseRootMotion = false);
     void HandleActionAnimationFinished();
-    void QueueAttackDamage(float Damage, float Distance, float Radius, bool bAllowMultipleTargets);
+    void QueueAttackDamage(float Damage, float Distance, float Radius, bool bAllowMultipleTargets, bool bFrontalAOE = false);
     void HandleAttackHitNotify();
     UFUNCTION(BlueprintPure, Category="Combat|Stance") bool IsFlyingSwordMode() const { return bFlyingSwordMode; }
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat|Stance") void ToggleFlyingSwordMode();
@@ -101,6 +101,7 @@ protected:
     float PendingAttackDistance = 0.f;
     float PendingAttackRadius = 0.f;
     bool bPendingAttackHitsMultiple = false;
+    bool bPendingAttackIsFrontalAOE = false;
     bool bPendingAttackDamage = false;
     UPROPERTY(EditDefaultsOnly, Category="Combat|Demo", meta=(ClampMin="1.0")) float DemoAttackDistanceMultiplier = 1.25f;
     UPROPERTY(EditDefaultsOnly, Category="Combat|Demo", meta=(ClampMin="1.0")) float DemoAttackRadiusMultiplier = 1.5f;

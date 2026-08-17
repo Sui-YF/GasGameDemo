@@ -57,6 +57,7 @@ private:
     UFUNCTION() void HandleOpenInventoryClicked();
     UFUNCTION() void HandleOpenSkillTreeClicked();
     UFUNCTION() void HandleOpenSettingsClicked();
+    UFUNCTION() void HandleOpenCustomKeybindingsClicked();
     UFUNCTION() void HandleCloseClicked();
     UFUNCTION() void HandleConfirmNameClicked();
     UFUNCTION() void OutfitHeadPrev(); UFUNCTION() void OutfitHeadNext(); UFUNCTION() void OutfitHairPrev(); UFUNCTION() void OutfitHairNext();
@@ -94,6 +95,7 @@ private:
     UFUNCTION() void HandleSkillLoadoutChanged();
     void SelectSkill(FName SkillRowName);
     void RefreshSkillDetails();
+    void PlaySkillPreviewAnimation(FName SkillRowName);
     void BeginKeyCapture(FName ActionName);
     void InitializeSettingsControls();
     void RefreshKeyBindingLabels();
@@ -105,5 +107,6 @@ private:
     int32 SelectedSaveSlot = 0;
     int32 PreviewOutfitParts[7] = {0,0,0,0,0,0,0};
     UPROPERTY(Transient) TObjectPtr<ACVADCharacter> OutfitPreviewCharacter;
+    UPROPERTY(Transient) TObjectPtr<ACVADCharacter> SkillPreviewCharacter;
     void ChangeOutfitPart(int32 Part,int32 Direction);
 };

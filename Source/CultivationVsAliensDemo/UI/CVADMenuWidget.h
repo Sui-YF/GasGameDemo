@@ -31,6 +31,7 @@ protected:
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_LoadGame;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Quit;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Settings;
+    UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_CustomKeybindings;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_ChangeName;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Skills;
     UPROPERTY(meta=(BindWidgetOptional)) TObjectPtr<UButton> Button_Outfit;
@@ -58,6 +59,7 @@ private:
     UFUNCTION() void HandleLoadClicked();
     UFUNCTION() void HandleQuitClicked();
     UFUNCTION() void HandleSettingsClicked();
+    UFUNCTION() void HandleCustomKeybindingsClicked();
     UFUNCTION() void HandleChangeNameClicked();
     UFUNCTION() void HandleSkillsClicked();
     UFUNCTION() void HandleOutfitClicked();

@@ -27,6 +27,7 @@ void UCVADMenuWidget::NativeConstruct()
     if (Button_LoadGame) Button_LoadGame->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleLoadClicked);
     if (Button_Quit) Button_Quit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleQuitClicked);
     if (Button_Settings) Button_Settings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSettingsClicked);
+    if (Button_CustomKeybindings) Button_CustomKeybindings->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCustomKeybindingsClicked);
     if (Button_ChangeName) Button_ChangeName->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleChangeNameClicked);
     if (Button_Skills) Button_Skills->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleSkillsClicked);
     if (Button_Outfit) Button_Outfit->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOutfitClicked);
@@ -102,6 +103,7 @@ void UCVADMenuWidget::HandleLoadClicked()
 }
 void UCVADMenuWidget::HandleQuitClicked() { QuitGame(); }
 void UCVADMenuWidget::HandleSettingsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSettingsScreen(); }
+void UCVADMenuWidget::HandleCustomKeybindingsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowCustomKeybindingsScreen(); }
 void UCVADMenuWidget::HandleChangeNameClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowNameEntryScreen(); }
 void UCVADMenuWidget::HandleSkillsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
 void UCVADMenuWidget::HandleOutfitClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowOutfitScreen(); }

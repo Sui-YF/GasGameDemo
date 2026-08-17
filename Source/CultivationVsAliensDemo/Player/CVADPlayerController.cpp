@@ -196,6 +196,7 @@ void ACVADPlayerController::BeginPlay()
     if (!ResultWidgetClass) ResultWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_Result.WBP_Result_C"));
     if (!LobbyWidgetClass) LobbyWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_Lobby.WBP_Lobby_C"));
     if (!SettingsWidgetClass) SettingsWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_Settings.WBP_Settings_C"));
+    if (!CustomKeybindingsWidgetClass) CustomKeybindingsWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_CustomKeybindings.WBP_CustomKeybindings_C"));
     if (!SkillTreeWidgetClass) SkillTreeWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_SkillTree.WBP_SkillTree_C"));
     if (!SaveSlotsWidgetClass) SaveSlotsWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_SaveSlots.WBP_SaveSlots_C"));
     if (!NameEntryWidgetClass) NameEntryWidgetClass = LoadClass<UCVADUserWidget>(nullptr, TEXT("/Game/CVAD/UI/WBP_NameEntry.WBP_NameEntry_C"));
@@ -536,6 +537,7 @@ void ACVADPlayerController::ShowModalWidget(TSubclassOf<UCVADUserWidget> WidgetC
 }
 
 void ACVADPlayerController::ShowSettingsScreen() { ShowModalWidget(SettingsWidgetClass); }
+void ACVADPlayerController::ShowCustomKeybindingsScreen() { ShowModalWidget(CustomKeybindingsWidgetClass, 210); }
 void ACVADPlayerController::ShowSkillTreeScreen()
 {
     const bool bFrontend = GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));

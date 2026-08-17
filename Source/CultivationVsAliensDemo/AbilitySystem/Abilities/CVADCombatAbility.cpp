@@ -153,11 +153,13 @@ void UCVADCombatAbility::ActivateAbility(
                 const float EffectiveDistance=AttackDistance*(bSwordHeavyAttack?1.15f:1.f);
                 const float HeavySweepRadius=EffectiveRadius*(bSwordHeavyAttack?1.35f:1.f);
                 Character->QueueAttackDamage(EffectiveDamage, EffectiveDistance, HeavySweepRadius,
-                    AbilityInput == ECVADAbilityInput::FlyingSword ? true : bThisHitMultiple);
+                    AbilityInput == ECVADAbilityInput::FlyingSword ? true : bThisHitMultiple,
+                    bSwordHeavyAttack);
             }
             Character->PlayReplicatedActionAnimation(AnimationToPlay,
                 AbilityInput == ECVADAbilityInput::HeavyAttack
-                || AbilityInput == ECVADAbilityInput::Dodge);
+                || AbilityInput == ECVADAbilityInput::Dodge
+                || AbilityInput == ECVADAbilityInput::SwitchStance);
         }
         UE_LOG(LogCVADCombatAbility, Log, TEXT("Server executing %s Avatar=%s Damage=%.1f Distance=%.1f Radius=%.1f"),
             *GetNameSafe(this), *GetNameSafe(ActorInfo->AvatarActor.Get()), EffectiveDamage, AttackDistance, EffectiveRadius);

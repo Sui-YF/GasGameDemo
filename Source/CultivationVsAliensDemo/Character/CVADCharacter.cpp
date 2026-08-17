@@ -493,13 +493,14 @@ void ACVADCharacter::PlayReplicatedActionAnimation(UAnimSequenceBase* Animation,
     if (HasAuthority()) MulticastPlayActionAnimation(Animation,bUseRootMotion);
 }
 
-void ACVADCharacter::QueueAttackDamage(float Damage, float Distance, float Radius, bool bAllowMultipleTargets)
+void ACVADCharacter::QueueAttackDamage(float Damage, float Distance, float Radius, bool bAllowMultipleTargets, bool bFrontalAOE)
 {
     if (!HasAuthority()) return;
     PendingAttackDamage = Damage;
     PendingAttackDistance = Distance * DemoAttackDistanceMultiplier;
     PendingAttackRadius = Radius * DemoAttackRadiusMultiplier;
     bPendingAttackHitsMultiple = bAllowMultipleTargets;
+    bPendingAttackIsFrontalAOE = bFrontalAOE;
     bPendingAttackDamage = Damage > 0.f;
 }
 
@@ -520,6 +521,11 @@ void ACVADCharacter::HandleAttackHitNotify()
     {
         AActor* Target = Result.GetActor();
         if (!Target || Target == this || DamagedActors.Contains(Target)) continue;
+        if (bPendingAttackIsFrontalAOE)
+        {
+            const FVector ToTarget = (Target->GetActorLocation() - GetActorLocation()).GetSafeNormal2D();
+            if (FVector::DotProduct(GetActorForwardVector(), ToTarget) < 0.15f) continue;
+        }
         IAbilitySystemInterface* AbilityInterface = Cast<IAbilitySystemInterface>(Target);
         UAbilitySystemComponent* TargetASC = AbilityInterface ? AbilityInterface->GetAbilitySystemComponent() : nullptr;
         if (!TargetASC) continue;
@@ -644,6 +650,7 @@ void ACVADCharacter::FinishActionAnimationDeferred()
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Attacking")));
     bPendingAttackDamage = false;
+    bPendingAttackIsFrontalAOE = false;
     if (PendingActionAnimation)
     {
         UAnimSequenceBase* Next = PendingActionAnimation;

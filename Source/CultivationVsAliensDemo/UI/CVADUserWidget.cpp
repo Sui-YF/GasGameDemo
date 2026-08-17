@@ -40,6 +40,7 @@ void UCVADUserWidget::NativeConstruct()
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Inventory")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOpenInventoryClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_SkillTree")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOpenSkillTreeClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Settings")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOpenSettingsClicked);
+    if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_CustomKeybindings")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleOpenCustomKeybindingsClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Close")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Back")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
     if (UButton* Button = Cast<UButton>(GetWidgetFromName(TEXT("Button_Cancel")))) Button->OnClicked.AddUniqueDynamic(this, &ThisClass::HandleCloseClicked);
@@ -106,6 +107,17 @@ void UCVADUserWidget::NativeConstruct()
     if (GetClass()->GetName().Contains(TEXT("WBP_SaveSlots"))) { SelectedSaveSlot=GetLastUsedProfileSlot(); RefreshSaveSlotPreviews(); }
     if (GetClass()->GetName().Contains(TEXT("WBP_SkillTree")))
     {
+        if (UViewport* Preview = Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_SkillPreview"))))
+        {
+            Preview->SetBackgroundColor(FLinearColor(0.01f, 0.018f, 0.035f, 1.f));
+            Preview->SetShowFlag(TEXT("PostProcessing"), false);
+            Preview->SetShowFlag(TEXT("Bloom"), false);
+            Preview->SetShowFlag(TEXT("DepthOfField"), false);
+            TSubclassOf<ACVADCharacter> PreviewClass = LoadClass<ACVADCharacter>(
+                nullptr, TEXT("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter.BP_LanfangCharacter_C"));
+            SkillPreviewCharacter = Cast<ACVADCharacter>(Preview->Spawn(PreviewClass.Get() ? PreviewClass.Get() : ACVADCharacter::StaticClass()));
+            if (SkillPreviewCharacter) SkillPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
+        }
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack1);
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack2")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack2);
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack3")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack3);
@@ -118,9 +130,8 @@ void UCVADUserWidget::NativeConstruct()
         if(CachedPlayerState) CachedPlayerState->OnSkillLoadoutChanged.AddUniqueDynamic(this,&ThisClass::HandleSkillLoadoutChanged);
         SelectedSkillRow=TEXT("SwordAttack1"); RefreshSkillDetails();
     }
-    if (GetClass()->GetName().Contains(TEXT("WBP_Settings")))
+    if (GetClass()->GetName().Contains(TEXT("WBP_Settings")) || GetClass()->GetName().Contains(TEXT("WBP_CustomKeybindings")))
     {
-        if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_Apply")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleSettingsApplyClicked);
         if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_ResetBindings")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleSettingsResetClicked);
         if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_RebindMoveForward")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::CaptureMoveForward);
         if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_RebindMoveBack")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::CaptureMoveBack);
@@ -132,7 +143,15 @@ void UCVADUserWidget::NativeConstruct()
         if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_RebindDodge")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::CaptureDodge);
         if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_RebindFlyingSword")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::CaptureFlyingSword);
         if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_RebindSwitchStance")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::CaptureSwitchStance);
-        InitializeSettingsControls();
+        if (GetClass()->GetName().Contains(TEXT("WBP_Settings")))
+        {
+            if (UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_Apply")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::HandleSettingsApplyClicked);
+            InitializeSettingsControls();
+        }
+        else
+        {
+            RefreshKeyBindingLabels();
+        }
         SetIsFocusable(true);
     }
 }
@@ -264,6 +283,7 @@ void UCVADUserWidget::HandlePauseReturnMenuClicked()
 void UCVADUserWidget::HandleOpenInventoryClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
 void UCVADUserWidget::HandleOpenSkillTreeClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSkillTreeScreen(); }
 void UCVADUserWidget::HandleOpenSettingsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowSettingsScreen(); }
+void UCVADUserWidget::HandleOpenCustomKeybindingsClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->ShowCustomKeybindingsScreen(); }
 void UCVADUserWidget::HandleCloseClicked() { if (ACVADPlayerController* PC=Cast<ACVADPlayerController>(GetOwningPlayer())) PC->CloseTopScreen(); else CloseScreen(); }
 void UCVADUserWidget::HandleConfirmNameClicked()
 {
@@ -321,13 +341,24 @@ void UCVADUserWidget::RefreshOutfitPreview()
     if(OutfitPreviewCharacter) OutfitPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
     static const TCHAR* Names[]={TEXT("Text_HeadValue"),TEXT("Text_HairValue"),TEXT("Text_HatValue"),TEXT("Text_UpperValue"),TEXT("Text_HandsValue"),TEXT("Text_LowerValue"),TEXT("Text_FeetValue")};
     static const TCHAR* Labels[]={TEXT("脸型"),TEXT("发型"),TEXT("帽子"),TEXT("上装"),TEXT("手部"),TEXT("下装"),TEXT("鞋子")}; static const int32 Counts[]={3,4,6,5,3,3,7};
-    for(int32 I=0;I<7;++I)if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(Names[I])))T->SetText(FText::FromString(FString::Printf(TEXT("%s %d/%d"),Labels[I],PreviewOutfitParts[I]+1,Counts[I])));
+    for(int32 I=0;I<7;++I)if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(Names[I])))T->SetText(FText::FromString(Labels[I]));
 }
 void UCVADUserWidget::HandleOutfitConfirm()
 {
     UEditableTextBox* NameInput=Cast<UEditableTextBox>(GetWidgetFromName(TEXT("Input_PlayerName")));FText Failure;
-    if(NameInput&&!ValidatePlayerName(NameInput->GetText().ToString(),Failure)){if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_OutfitStatus"))))T->SetText(Failure);return;}
-    if(NameInput)SubmitPlayerName(NameInput->GetText().ToString());
+    if(NameInput)
+    {
+        const FString RequestedName = NameInput->GetText().ToString().TrimStartAndEnd();
+        if(!RequestedName.IsEmpty())
+        {
+            if(!ValidatePlayerName(RequestedName,Failure))
+            {
+                if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_OutfitStatus")))) T->SetText(Failure);
+                return;
+            }
+            SubmitPlayerName(RequestedName);
+        }
+    }
     if(GConfig){for(int32 I=0;I<7;++I)GConfig->SetInt(TEXT("CVAD.Appearance"),*FString::Printf(TEXT("Part%d"),I),PreviewOutfitParts[I],GGameUserSettingsIni);GConfig->Flush(false,GGameUserSettingsIni);}
     if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_OutfitStatus")))) T->SetText(NSLOCTEXT("CVAD","OutfitSaved","已确认，进入游戏后生效"));
 }
@@ -429,12 +460,8 @@ void UCVADUserWidget::SelectSkill(FName SkillRowName)
 {
     SelectedSkillRow=SkillRowName;
     if(!CachedPlayerState) InitializeFromOwningPlayer();
-    if(CachedPlayerState && !CachedPlayerState->IsSkillUnlocked(SkillRowName))
-    {
-        FText Failure;
-        if(CachedPlayerState->CanUnlockSkill(SkillRowName,Failure)) CachedPlayerState->RequestSpendSkillPoint(SkillRowName);
-    }
     RefreshSkillDetails();
+    PlaySkillPreviewAnimation(SkillRowName);
     UE_LOG(LogTemp,Log,TEXT("Skill tree selected %s"),*SkillRowName.ToString());
 }
 void UCVADUserWidget::SelectSwordAttack1(){SelectSkill(TEXT("SwordAttack1"));} void UCVADUserWidget::SelectSwordAttack2(){SelectSkill(TEXT("SwordAttack2"));}
@@ -454,7 +481,15 @@ void UCVADUserWidget::EquipSelectedSkill()
         if(CachedPlayerState->CanUnlockSkill(SelectedSkillRow,Failure))
         {
             CachedPlayerState->RequestSpendSkillPoint(SelectedSkillRow);
-            if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillCost")))) T->SetText(NSLOCTEXT("CVAD","SkillPurchaseRequested","已购买；再次点击即可装配"));
+            CachedPlayerState->EquipSkill(Row->SkillSlot,SelectedSkillRow);
+            if(GConfig)
+            {
+                const FString Key=FString::Printf(TEXT("EquippedSkill%d"),static_cast<int32>(Row->SkillSlot));
+                GConfig->SetString(TEXT("CVAD.SkillLoadout"),*Key,*SelectedSkillRow.ToString(),GGameUserSettingsIni);
+                GConfig->Flush(false,GGameUserSettingsIni);
+            }
+            RefreshSkillDetails();
+            if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillCost")))) T->SetText(NSLOCTEXT("CVAD","SkillPurchasedAndEquipped","已购买并装配"));
         }
         else if(UTextBlock* T=Cast<UTextBlock>(GetWidgetFromName(TEXT("Text_SkillCost")))) T->SetText(Failure);
         return;
@@ -526,6 +561,21 @@ void UCVADUserWidget::RefreshSkillDetails()
         }
         AvailableText->SetText(FText::FromString(Available));
     }
+}
+
+void UCVADUserWidget::PlaySkillPreviewAnimation(FName SkillRowName)
+{
+    if (!SkillPreviewCharacter) return;
+    UDataTable* Table = LoadObject<UDataTable>(nullptr, TEXT("/Game/CVAD/Data/DT_Skills.DT_Skills"));
+    const FCVADSkillRow* Row = Table ? Table->FindRow<FCVADSkillRow>(SkillRowName, TEXT("SkillPreview")) : nullptr;
+    if (!Row) return;
+    const TSubclassOf<UGameplayAbility> AbilityClass = Row->AbilityClass.LoadSynchronous();
+    const UCVADCombatAbility* Ability = AbilityClass
+        ? Cast<UCVADCombatAbility>(AbilityClass->GetDefaultObject())
+        : nullptr;
+    if (!Ability || !Ability->GetPreviewAnimation()) return;
+    SkillPreviewCharacter->GetMesh()->PlayAnimation(Ability->GetPreviewAnimation(), false);
+    UE_LOG(LogTemp, Log, TEXT("Playing skill preview %s"), *SkillRowName.ToString());
 }
 
 bool UCVADUserWidget::GetSkillNodeInfo(FName SkillRowName, FText& DisplayName, FText& Description,

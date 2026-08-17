@@ -39,6 +39,7 @@ public:
     UFUNCTION(BlueprintCallable, Category="Input|Rebinding") void ResetInputBindings();
     UFUNCTION(BlueprintPure, Category="Input|Rebinding") FKey GetBoundKey(FName ActionName) const;
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSettingsScreen();
+    UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowCustomKeybindingsScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSkillTreeScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowInventoryScreen();
     UFUNCTION(BlueprintCallable, Category="UI|Navigation") void ShowSaveSlotsScreen();
@@ -90,6 +91,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> MainMenuWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> LobbyWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SettingsWidgetClass;
+    UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> CustomKeybindingsWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SkillTreeWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> SaveSlotsWidgetClass;
     UPROPERTY(EditDefaultsOnly, Category="UI") TSubclassOf<UCVADUserWidget> NameEntryWidgetClass;

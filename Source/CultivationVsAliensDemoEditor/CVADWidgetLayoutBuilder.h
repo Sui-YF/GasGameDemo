@@ -15,6 +15,7 @@ public:
     UFUNCTION(BlueprintCallable, Category="CVAD Editor")
     static bool BuildFlyingSwordAnimationBlueprint();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool BuildMinionAnimationBlueprint();
+    UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool BuildCustomKeybindingsScreen();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool DiagnoseAnimationBlueprints();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool RepairAnimationBlueprints();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool BuildEnemyAIAssets();

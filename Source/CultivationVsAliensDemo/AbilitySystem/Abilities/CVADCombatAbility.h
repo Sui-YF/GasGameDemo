@@ -35,6 +35,7 @@ public:
     float GetPreviewRadius(int32 Level) const { return AttackRadius * (1.f + RadiusGrowthPerLevel * FMath::Max(0, Level - 1)); }
     float GetPreviewCooldown(int32 Level) const { return CooldownSeconds * FMath::Max(0.5f, 1.f - CooldownReductionPerLevel * FMath::Max(0, Level - 1)); }
     float GetPreviewResourceCost() const { return ResourceCost; }
+    UAnimSequenceBase* GetPreviewAnimation() const { return AttackAnimation; }
 
     virtual void ActivateAbility(
         const FGameplayAbilitySpecHandle Handle,

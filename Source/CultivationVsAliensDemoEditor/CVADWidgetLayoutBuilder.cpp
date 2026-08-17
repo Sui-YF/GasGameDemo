@@ -1,6 +1,8 @@
 #include "CVADWidgetLayoutBuilder.h"
 #include "WidgetBlueprint.h"
+#include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "UI/CVADUserWidget.h"
 #include "Components/Border.h"
 #include "Components/Button.h"
 #include "Components/CanvasPanel.h"
@@ -531,8 +533,8 @@ namespace
         MakeButton(Menu,TEXT("Button_Skills"),TEXT("功法 / 技能装配"),FLinearColor(0.19f,0.16f,0.38f,1.f));
         MakeButton(Menu,TEXT("Button_Outfit"),TEXT("选择装扮"),FLinearColor(0.18f,0.26f,0.34f,1.f));
         MakeButton(Menu,TEXT("Button_Multiplayer"),TEXT("多人联机"),FLinearColor(0.1f,0.32f,0.48f,1.f));
-        MakeButton(Menu,TEXT("Button_ChangeName"),TEXT("修改玩家名称"));
-        MakeButton(Menu,TEXT("Button_Settings"),TEXT("设置 / 自定义按键"));
+        MakeButton(Menu,TEXT("Button_Settings"),TEXT("设置"));
+        MakeButton(Menu,TEXT("Button_CustomKeybindings"),TEXT("自定义按键"));
         MakeButton(Menu,TEXT("Button_Quit"),TEXT("退出游戏"),FLinearColor(0.24f,0.07f,0.09f,0.96f));
         MakeText(Menu,TEXT("Text_Status"),TEXT("准备就绪"),15,FLinearColor(0.55f,0.78f,0.9f));
 
@@ -949,8 +951,8 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
     const TArray<FPage> Pages = {
         {TEXT("WBP_Lobby"), {TEXT("Button_Ready"),TEXT("Button_StartGame"),TEXT("Button_LeaveLobby"),TEXT("Button_CopyAddress")}, {TEXT("Text_LobbyTitle"),TEXT("Text_HostName"),TEXT("Text_Player1"),TEXT("Text_Player2"),TEXT("Text_ConnectionStatus")}, {}, {}, {}, {TEXT("Input_ServerAddress")}},
         {TEXT("WBP_Multiplayer"), {TEXT("Button_HostListenServer"),TEXT("Button_JoinGame"),TEXT("Button_Close")}, {TEXT("Text_MultiplayerTitle"),TEXT("Text_RoomHelp"),TEXT("Text_Status")}, {}, {}, {}, {TEXT("Input_ServerAddress")}},
-        {TEXT("WBP_Pause"), {TEXT("Button_Resume"),TEXT("Button_Settings"),TEXT("Button_SaveGame"),TEXT("Button_LoadGame"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_PauseTitle")}},
-        {TEXT("WBP_Settings"), {TEXT("Button_RebindMoveForward"),TEXT("Button_RebindMoveBack"),TEXT("Button_RebindMoveLeft"),TEXT("Button_RebindMoveRight"),TEXT("Button_RebindJump"),TEXT("Button_RebindLightAttack"),TEXT("Button_RebindHeavyAttack"),TEXT("Button_RebindDodge"),TEXT("Button_RebindFlyingSword"),TEXT("Button_RebindSwitchStance"),TEXT("Button_ResetBindings"),TEXT("Button_Apply"),TEXT("Button_Cancel")}, {TEXT("Text_SettingsTitle"),TEXT("Text_RebindPrompt"),TEXT("Text_NameError")}, {TEXT("Slider_MasterVolume"),TEXT("Slider_MouseSensitivity"),TEXT("Slider_ResolutionScale")}, {TEXT("Check_Fullscreen"),TEXT("Check_VSync"),TEXT("Check_MouseFacing")}, {TEXT("Combo_Quality")}, {TEXT("Input_PlayerName")}},
+        {TEXT("WBP_Pause"), {TEXT("Button_Resume"),TEXT("Button_Settings"),TEXT("Button_CustomKeybindings"),TEXT("Button_SaveGame"),TEXT("Button_LoadGame"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_PauseTitle")}},
+        {TEXT("WBP_Settings"), {TEXT("Button_Apply"),TEXT("Button_Cancel")}, {TEXT("Text_SettingsTitle"),TEXT("Text_VideoSettingsHeader"),TEXT("Text_ResolutionScaleDesc"),TEXT("Text_QualityDesc"),TEXT("Text_FullscreenDesc"),TEXT("Text_VSyncDesc"),TEXT("Text_MouseSensitivityDesc"),TEXT("Text_MouseFacingDesc"),TEXT("Text_AudioSettingsHeader"),TEXT("Text_MasterVolumeDesc"),TEXT("Text_MusicVolumeDesc"),TEXT("Text_SFXVolumeDesc")}, {TEXT("Slider_ResolutionScale"),TEXT("Slider_MouseSensitivity"),TEXT("Slider_MasterVolume"),TEXT("Slider_MusicVolume"),TEXT("Slider_SFXVolume")}, {TEXT("Check_Fullscreen"),TEXT("Check_VSync"),TEXT("Check_MouseFacing")}, {TEXT("Combo_Quality")}, {TEXT("Input_PlayerName")}},
         {TEXT("WBP_Result"), {TEXT("Button_Retry"),TEXT("Button_ReturnLobby"),TEXT("Button_ReturnMainMenu")}, {TEXT("Text_ResultTitle"),TEXT("Text_ClearTime"),TEXT("Text_Defeats"),TEXT("Text_BossResult"),TEXT("Text_ExperienceEarned")}},
         {TEXT("WBP_NameEntry"), {TEXT("Button_ConfirmName"),TEXT("Button_CancelName")}, {TEXT("Text_NameTitle"),TEXT("Text_NameError")}, {}, {}, {}, {TEXT("Input_PlayerName")}},
         {TEXT("WBP_OutfitSelect"), {TEXT("Button_HeadPrev"),TEXT("Button_HeadNext"),TEXT("Button_HairPrev"),TEXT("Button_HairNext"),TEXT("Button_HatPrev"),TEXT("Button_HatNext"),TEXT("Button_UpperPrev"),TEXT("Button_UpperNext"),TEXT("Button_HandsPrev"),TEXT("Button_HandsNext"),TEXT("Button_LowerPrev"),TEXT("Button_LowerNext"),TEXT("Button_FeetPrev"),TEXT("Button_FeetNext"),TEXT("Button_OutfitConfirm"),TEXT("Button_Close")}, {TEXT("Text_OutfitTitle"),TEXT("Text_HeadValue"),TEXT("Text_HairValue"),TEXT("Text_HatValue"),TEXT("Text_UpperValue"),TEXT("Text_HandsValue"),TEXT("Text_LowerValue"),TEXT("Text_FeetValue"),TEXT("Text_OutfitStatus")}, {}, {}, {}, {TEXT("Input_PlayerName")}},
@@ -960,6 +962,7 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
     bool bAllSucceeded = true;
     const TMap<FString,FString> ButtonLabels={
         {TEXT("Button_SinglePlayer"),TEXT("开始游戏")},{TEXT("Button_HostListenServer"),TEXT("创建房间")},{TEXT("Button_JoinGame"),TEXT("加入房间")},{TEXT("Button_LoadGame"),TEXT("读取存档")},{TEXT("Button_Settings"),TEXT("游戏设置")},{TEXT("Button_Quit"),TEXT("退出游戏")},
+        {TEXT("Button_CustomKeybindings"),TEXT("自定义按键")},
         {TEXT("Button_Ready"),TEXT("准备 / 取消准备")},{TEXT("Button_StartGame"),TEXT("开始战斗")},{TEXT("Button_LeaveLobby"),TEXT("离开房间")},{TEXT("Button_CopyAddress"),TEXT("复制主机地址")},
         {TEXT("Button_Resume"),TEXT("继续游戏")},{TEXT("Button_Inventory"),TEXT("技能装配")},{TEXT("Button_SkillTree"),TEXT("技能树")},{TEXT("Button_SaveGame"),TEXT("保存游戏")},{TEXT("Button_ReturnMainMenu"),TEXT("返回主菜单")},
         {TEXT("Button_RebindMoveForward"),TEXT("前进按键")},{TEXT("Button_RebindMoveBack"),TEXT("后退按键")},{TEXT("Button_RebindMoveLeft"),TEXT("左移按键")},{TEXT("Button_RebindMoveRight"),TEXT("右移按键")},{TEXT("Button_RebindJump"),TEXT("跳跃按键")},
@@ -1024,7 +1027,7 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
                 const float Y=145.f+Index*88.f;
                 AddButton(PrevNames[Index],FText::FromString(FString::Printf(TEXT("<  %s"),Categories[Index])),183.f,Y,200.f,46.f);
                 AddButton(NextNames[Index],FText::FromString(FString::Printf(TEXT("%s  >"),Categories[Index])),983.f,Y,200.f,46.f);
-                AddText(ValueNames[Index],FText::FromString(FString::Printf(TEXT("%s 1/1"),Categories[Index])),513.f,Y,340.f,36.f,17);
+                AddText(ValueNames[Index],FText::FromString(Categories[Index]),513.f,Y,340.f,36.f,17);
             }
             UEditableTextBox* NameInput=Tree->ConstructWidget<UEditableTextBox>(UEditableTextBox::StaticClass(),TEXT("Input_PlayerName")); NameInput->bIsVariable=true;
             NameInput->SetHintText(FText::FromString(TEXT("输入角色名称"))); Place(NameInput,403.f,662.f,360.f,42.f);
@@ -1048,20 +1051,58 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
             auto Button=[Tree,&Place](const TCHAR* Name,const TCHAR* Value,float X,float Y,float W,float H)
             {UButton* B=Tree->ConstructWidget<UButton>(UButton::StaticClass(),Name);B->bIsVariable=true;UTextBlock* L=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),*FString::Printf(TEXT("Label_%s"),Name));L->SetText(FText::FromString(Value));L->SetJustification(ETextJustify::Center);FSlateFontInfo F=L->GetFont();F.Size=18;L->SetFont(F);B->AddChild(L);Place(B,X,Y,W,H);return B;};
             UBorder* BG=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SkillBackground"));BG->SetBrushColor(FLinearColor(0.01f,0.02f,0.045f,1.f));Place(BG,0,0,1366,768);
-            Text(TEXT("Text_SkillTreeTitle"),TEXT("功法研习与技能装配"),410,24,546,48,30,ETextJustify::Center);
+            Text(TEXT("Text_SkillTreeTitle"),TEXT("技能装配"),410,24,546,48,30,ETextJustify::Center);
             Text(TEXT("Text_Level"),TEXT("等级 1"),70,82,180,34,18);Text(TEXT("Text_Experience"),TEXT("经验 0/100"),260,82,220,34,18);Text(TEXT("Text_SkillPoints"),TEXT("技能点 99"),500,82,220,34,20);
-            Text(TEXT("Text_AvailableSkills"),TEXT("可研习功法（点击查看）"),70,135,530,40,22);Text(TEXT("Text_EquippedTitle"),TEXT("当前装配"),70,590,530,36,20);
+            Text(TEXT("Text_AvailableSkills"),TEXT("可选技能（点击查看演示）"),70,135,530,40,22);Text(TEXT("Text_EquippedTitle"),TEXT("当前装配"),70,590,530,36,20);
             const TCHAR* SkillButtons[]={TEXT("Button_SwordAttack1"),TEXT("Button_SwordAttack2"),TEXT("Button_SwordAttack3"),TEXT("Button_SwordAttack4"),TEXT("Button_SwordAttack5"),TEXT("Button_FlyingSword1"),TEXT("Button_FlyingSword2"),TEXT("Button_FlyingSword3")};
             const TCHAR* SkillLabels[]={TEXT("持剑 · 破阵式"),TEXT("持剑 · 普攻二"),TEXT("持剑 · 普攻三"),TEXT("持剑 · 普攻四"),TEXT("持剑 · 绝技"),TEXT("御剑 · 飞剑诀"),TEXT("御剑 · 剑阵"),TEXT("御剑 · 追魂剑")};
             for(int32 I=0;I<8;++I) Button(SkillButtons[I],SkillLabels[I],70+(I%2)*270,185+(I/2)*82,250,60);
             UBorder* Detail=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SkillDetailPanel"));Detail->SetBrushColor(FLinearColor(0.035f,0.065f,0.12f,1.f));Place(Detail,650,135,640,475);
-            Text(TEXT("Text_SelectedSkillName"),TEXT("请选择一项功法"),690,172,560,48,26);
-            Text(TEXT("Text_SelectedSkillDescription"),TEXT("这里显示技能效果、伤害、范围和升级说明。"),690,235,560,145,18);
-            Text(TEXT("Text_Prerequisite"),TEXT("前置：无"),690,400,560,40,18);
-            Text(TEXT("Text_SkillCost"),TEXT("消耗技能点：0"),690,452,560,40,20);
-            Button(TEXT("Button_EquipSelected"),TEXT("购买 / 装配所选技能"),690,520,300,58);
+            Text(TEXT("Text_SelectedSkillName"),TEXT("请选择一项技能"),690,172,560,48,26);
+            Text(TEXT("Text_SkillDemoLabel"),TEXT("技能演示"),690,225,200,26,18);
+            UViewport* SkillPreview=Tree->ConstructWidget<UViewport>(UViewport::StaticClass(),TEXT("Viewport_SkillPreview"));SkillPreview->bIsVariable=true;Place(SkillPreview,690,250,300,170);
+            Text(TEXT("Text_SelectedSkillDescription"),TEXT("这里显示技能效果、伤害、范围和升级说明。"),690,430,560,95,18);
+            Text(TEXT("Text_Prerequisite"),TEXT("前置：无"),690,530,560,34,18);
+            Text(TEXT("Text_SkillCost"),TEXT("消耗技能点：0"),690,566,560,34,18);
+            Button(TEXT("Button_EquipSelected"),TEXT("购买并装配所选技能"),690,606,300,54);
             Text(TEXT("Text_EquippedSkills"),TEXT("已装配技能会显示在这里"),70,628,550,42,18);
             Button(TEXT("Button_Close"),TEXT("返回"),70,690,150,46);
+            SaveWidgetBlueprint(BP);continue;
+        }
+        if(Page.Asset==FString(TEXT("WBP_Settings")))
+        {
+            UCanvasPanel* Root=Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(),TEXT("SettingsRoot"));Tree->RootWidget=Root;
+            auto Place=[Root](UWidget* Widget,float X,float Y,float W,float H){UCanvasPanelSlot* Slot=Root->AddChildToCanvas(Widget);Slot->SetPosition(FVector2D(X,Y));Slot->SetSize(FVector2D(W,H));};
+            auto Text=[Tree,&Place](const TCHAR* Name,const FText& Value,float X,float Y,float W,float H,int32 Size)
+            {UTextBlock* T=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),Name);T->bIsVariable=true;T->SetText(Value);T->SetJustification(ETextJustify::Left);FSlateFontInfo F=T->GetFont();F.Size=Size;T->SetFont(F);Place(T,X,Y,W,H);return T;};
+            auto Slider=[Tree,&Place](const TCHAR* Name,float X,float Y,float W,float H){USlider* S=Tree->ConstructWidget<USlider>(USlider::StaticClass(),Name);S->bIsVariable=true;Place(S,X,Y,W,H);return S;};
+            auto Check=[Tree,&Place](const TCHAR* Name,const TCHAR* Label,float X,float Y,float W,float H)
+            {UCheckBox* C=Tree->ConstructWidget<UCheckBox>(UCheckBox::StaticClass(),Name);C->bIsVariable=true;Place(C,X,Y,W,H);UTextBlock* L=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),*FString::Printf(TEXT("Label_%s"),Name));L->SetText(FText::FromString(Label));L->SetJustification(ETextJustify::Left);FSlateFontInfo F=L->GetFont();F.Size=16;L->SetFont(F);Place(L,X+42,Y,500,H);return C;};
+
+            UBorder* BG=Tree->ConstructWidget<UBorder>(UBorder::StaticClass(),TEXT("SettingsBackground"));BG->SetBrushColor(FLinearColor(0.01f,0.02f,0.045f,1.f));Place(BG,0.f,0.f,1366.f,768.f);
+            Text(TEXT("Text_SettingsTitle"),FText::FromString(TEXT("游戏设置")),410.f,24.f,546.f,48.f,30);
+            Text(TEXT("Text_VideoSettingsHeader"),FText::FromString(TEXT("画面设置")),80.f,90.f,220.f,32.f,22);
+            Text(TEXT("Text_ResolutionScaleDesc"),FText::FromString(TEXT("渲染比例：降低可提升帧数，提高画面更清晰。")),80.f,135.f,900.f,26.f,16);
+            Slider(TEXT("Slider_ResolutionScale"),80.f,165.f,900.f,32.f);
+            Text(TEXT("Text_QualityDesc"),FText::FromString(TEXT("整体画质：Low / Medium / High / Epic / Cinematic。")),80.f,205.f,900.f,26.f,16);
+            UComboBoxString* Quality=Tree->ConstructWidget<UComboBoxString>(UComboBoxString::StaticClass(),TEXT("Combo_Quality"));Quality->bIsVariable=true;Place(Quality,80.f,235.f,400.f,36.f);
+            Text(TEXT("Text_FullscreenDesc"),FText::FromString(TEXT("全屏：以独占或窗口化全屏模式运行游戏。")),80.f,285.f,900.f,26.f,16);
+            Check(TEXT("Check_Fullscreen"),TEXT("全屏"),80.f,315.f,30.f,30.f);
+            Text(TEXT("Text_VSyncDesc"),FText::FromString(TEXT("垂直同步：开启可减少画面撕裂，但可能增加输入延迟。")),80.f,355.f,900.f,26.f,16);
+            Check(TEXT("Check_VSync"),TEXT("垂直同步"),80.f,385.f,30.f,30.f);
+            Text(TEXT("Text_MouseSensitivityDesc"),FText::FromString(TEXT("鼠标灵敏度：控制镜头旋转速度。")),80.f,425.f,900.f,26.f,16);
+            Slider(TEXT("Slider_MouseSensitivity"),80.f,455.f,900.f,32.f);
+            Text(TEXT("Text_MouseFacingDesc"),FText::FromString(TEXT("鼠标朝向：开启后角色朝向跟随准星/镜头水平方向。")),80.f,495.f,900.f,26.f,16);
+            Check(TEXT("Check_MouseFacing"),TEXT("鼠标朝向"),80.f,525.f,30.f,30.f);
+            Text(TEXT("Text_AudioSettingsHeader"),FText::FromString(TEXT("音频设置")),80.f,575.f,220.f,32.f,22);
+            Text(TEXT("Text_MasterVolumeDesc"),FText::FromString(TEXT("主音量：控制所有声音的总体大小。")),80.f,620.f,900.f,26.f,16);
+            Slider(TEXT("Slider_MasterVolume"),80.f,650.f,900.f,32.f);
+            Text(TEXT("Text_MusicVolumeDesc"),FText::FromString(TEXT("音乐音量：控制背景音乐。")),80.f,690.f,900.f,26.f,16);
+            Slider(TEXT("Slider_MusicVolume"),80.f,720.f,900.f,32.f);
+            Text(TEXT("Text_SFXVolumeDesc"),FText::FromString(TEXT("音效音量：控制攻击、受击等音效。")),80.f,760.f,900.f,26.f,16);
+            Slider(TEXT("Slider_SFXVolume"),80.f,790.f,900.f,32.f);
+            UButton* Apply=Tree->ConstructWidget<UButton>(UButton::StaticClass(),TEXT("Button_Apply"));Apply->bIsVariable=true;UTextBlock* ApplyLabel=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),TEXT("Label_Button_Apply"));ApplyLabel->SetText(FText::FromString(TEXT("应用设置")));ApplyLabel->SetJustification(ETextJustify::Center);FSlateFontInfo AF=ApplyLabel->GetFont();AF.Size=18;ApplyLabel->SetFont(AF);Apply->AddChild(ApplyLabel);Place(Apply,80.f,840.f,220.f,46.f);
+            UButton* Cancel=Tree->ConstructWidget<UButton>(UButton::StaticClass(),TEXT("Button_Cancel"));Cancel->bIsVariable=true;UTextBlock* CancelLabel=Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),TEXT("Label_Button_Cancel"));CancelLabel->SetText(FText::FromString(TEXT("返回")));CancelLabel->SetJustification(ETextJustify::Center);FSlateFontInfo CF=CancelLabel->GetFont();CF.Size=18;CancelLabel->SetFont(CF);Cancel->AddChild(CancelLabel);Place(Cancel,320.f,840.f,220.f,46.f);
             SaveWidgetBlueprint(BP);continue;
         }
         UScrollBox* Root = Tree->ConstructWidget<UScrollBox>(UScrollBox::StaticClass(), TEXT("ControlRoot")); Tree->RootWidget = Root;
@@ -1086,7 +1127,118 @@ bool UCVADEditorAssetBuilder::BuildAllUIControlSkeletons()
 
 bool UCVADEditorAssetBuilder::BuildAllWidgetLayouts()
 {
-    return BuildMainHUDV2() && BuildMainMenuV2();
+    return BuildMainHUDV2() && BuildMainMenuV2() && BuildCustomKeybindingsScreen();
+}
+
+bool UCVADEditorAssetBuilder::BuildCustomKeybindingsScreen()
+{
+    UWidgetBlueprint* Blueprint = LoadWidgetBlueprint(TEXT("/Game/CVAD/UI/WBP_CustomKeybindings.WBP_CustomKeybindings"));
+    if (!Blueprint)
+    {
+        UPackage* Package = CreatePackage(TEXT("/Game/CVAD/UI/WBP_CustomKeybindings"));
+        Blueprint = NewObject<UWidgetBlueprint>(Package, TEXT("WBP_CustomKeybindings"), RF_Public | RF_Standalone);
+        Blueprint->ParentClass = UCVADUserWidget::StaticClass();
+        Blueprint->WidgetTree = NewObject<UWidgetTree>(Blueprint, TEXT("WidgetTree"), RF_Transactional);
+        FAssetRegistryModule::AssetCreated(Blueprint);
+    }
+    if (!Blueprint || !Blueprint->WidgetTree) return false;
+    Blueprint->ParentClass = UCVADUserWidget::StaticClass();
+
+    UWidgetTree* Tree = Blueprint->WidgetTree;
+    Tree->Modify();
+    Tree->RootWidget = nullptr;
+
+    UCanvasPanel* Root = Tree->ConstructWidget<UCanvasPanel>(UCanvasPanel::StaticClass(), TEXT("CustomKeybindingsRoot"));
+    Tree->RootWidget = Root;
+
+    auto Place = [Root](UWidget* Widget, float X, float Y, float W, float H)
+    {
+        UCanvasPanelSlot* Slot = Root->AddChildToCanvas(Widget);
+        Slot->SetPosition(FVector2D(X, Y));
+        Slot->SetSize(FVector2D(W, H));
+    };
+    auto Text = [Tree, &Place](const TCHAR* Name, const FText& Value, float X, float Y, float W, float H, int32 Size)
+    {
+        UTextBlock* T = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Name);
+        T->bIsVariable = true;
+        T->SetText(Value);
+        T->SetJustification(ETextJustify::Left);
+        FSlateFontInfo Font = T->GetFont();
+        Font.Size = Size;
+        T->SetFont(Font);
+        Place(T, X, Y, W, H);
+        return T;
+    };
+
+    UBorder* Background = Tree->ConstructWidget<UBorder>(UBorder::StaticClass(), TEXT("KeybindingsBackground"));
+    Background->SetBrushColor(FLinearColor(0.01f, 0.02f, 0.045f, 1.f));
+    Place(Background, 0.f, 0.f, 1366.f, 768.f);
+    Text(TEXT("Text_KeybindingsTitle"), FText::FromString(TEXT("自定义按键")), 470.f, 30.f, 430.f, 48.f, 30);
+    Text(TEXT("Text_KeybindingsHint"), FText::FromString(TEXT("点击任一按钮后，按下新的按键即可绑定。")), 400.f, 88.f, 570.f, 30.f, 17);
+
+    struct FKeybindAction { const TCHAR* Button; const TCHAR* KeyText; const TCHAR* Label; };
+    const FKeybindAction Actions[] = {
+        {TEXT("Button_RebindMoveForward"), TEXT("Text_Key_MoveForward"), TEXT("前进")},
+        {TEXT("Button_RebindMoveBack"), TEXT("Text_Key_MoveBack"), TEXT("后退")},
+        {TEXT("Button_RebindMoveLeft"), TEXT("Text_Key_MoveLeft"), TEXT("左移")},
+        {TEXT("Button_RebindMoveRight"), TEXT("Text_Key_MoveRight"), TEXT("右移")},
+        {TEXT("Button_RebindJump"), TEXT("Text_Key_Jump"), TEXT("跳跃")},
+        {TEXT("Button_RebindLightAttack"), TEXT("Text_Key_LightAttack"), TEXT("普通攻击")},
+        {TEXT("Button_RebindHeavyAttack"), TEXT("Text_Key_HeavyAttack"), TEXT("重攻击")},
+        {TEXT("Button_RebindDodge"), TEXT("Text_Key_Dodge"), TEXT("闪避 / 翻滚")},
+        {TEXT("Button_RebindFlyingSword"), TEXT("Text_Key_FlyingSword"), TEXT("飞剑技能")},
+        {TEXT("Button_RebindSwitchStance"), TEXT("Text_Key_SwitchStance"), TEXT("切换战斗姿态")},
+    };
+
+    for (int32 Index = 0; Index < UE_ARRAY_COUNT(Actions); ++Index)
+    {
+        const float Y = 135.f + Index * 48.f;
+        UButton* Button = Tree->ConstructWidget<UButton>(UButton::StaticClass(), Actions[Index].Button);
+        Button->bIsVariable = true;
+        UTextBlock* Label = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(),
+            *FString::Printf(TEXT("Label_%s"), Actions[Index].Button));
+        Label->SetText(FText::FromString(Actions[Index].Label));
+        Label->SetJustification(ETextJustify::Center);
+        FSlateFontInfo Font = Label->GetFont();
+        Font.Size = 18;
+        Label->SetFont(Font);
+        Button->AddChild(Label);
+        Place(Button, 300.f, Y, 260.f, 42.f);
+
+        UTextBlock* KeyText = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), Actions[Index].KeyText);
+        KeyText->bIsVariable = true;
+        KeyText->SetText(FText::FromString(TEXT("当前按键：未绑定")));
+        KeyText->SetJustification(ETextJustify::Left);
+        FSlateFontInfo KeyFont = KeyText->GetFont();
+        KeyFont.Size = 17;
+        KeyText->SetFont(KeyFont);
+        Place(KeyText, 590.f, Y, 340.f, 42.f);
+    }
+
+    UButton* ResetButton = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Button_ResetBindings"));
+    ResetButton->bIsVariable = true;
+    UTextBlock* ResetLabel = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Label_Button_ResetBindings"));
+    ResetLabel->SetText(FText::FromString(TEXT("恢复默认按键")));
+    ResetLabel->SetJustification(ETextJustify::Center);
+    FSlateFontInfo ResetFont = ResetLabel->GetFont();
+    ResetFont.Size = 18;
+    ResetLabel->SetFont(ResetFont);
+    ResetButton->AddChild(ResetLabel);
+    Place(ResetButton, 300.f, 640.f, 260.f, 46.f);
+
+    UButton* CloseButton = Tree->ConstructWidget<UButton>(UButton::StaticClass(), TEXT("Button_Close"));
+    CloseButton->bIsVariable = true;
+    UTextBlock* CloseLabel = Tree->ConstructWidget<UTextBlock>(UTextBlock::StaticClass(), TEXT("Label_Button_Close"));
+    CloseLabel->SetText(FText::FromString(TEXT("返回")));
+    CloseLabel->SetJustification(ETextJustify::Center);
+    FSlateFontInfo CloseFont = CloseLabel->GetFont();
+    CloseFont.Size = 18;
+    CloseLabel->SetFont(CloseFont);
+    CloseButton->AddChild(CloseLabel);
+    Place(CloseButton, 590.f, 640.f, 260.f, 46.f);
+
+    SaveWidgetBlueprint(Blueprint);
+    return true;
 }
 
 bool UCVADEditorAssetBuilder::UpdateUIBackButtons()
@@ -1099,6 +1251,7 @@ bool UCVADEditorAssetBuilder::UpdateUIBackButtons()
 
     const FBackButtonPage Pages[] = {
         {TEXT("/Game/CVAD/UI/WBP_Settings.WBP_Settings"), TEXT("Button_Cancel")},
+        {TEXT("/Game/CVAD/UI/WBP_CustomKeybindings.WBP_CustomKeybindings"), TEXT("Button_Close")},
         {TEXT("/Game/CVAD/UI/WBP_NameEntry.WBP_NameEntry"), TEXT("Button_CancelName")},
         {TEXT("/Game/CVAD/UI/WBP_OutfitSelect.WBP_OutfitSelect"), TEXT("Button_Close")},
         {TEXT("/Game/CVAD/UI/WBP_SaveSlots.WBP_SaveSlots"), TEXT("Button_Close")},
