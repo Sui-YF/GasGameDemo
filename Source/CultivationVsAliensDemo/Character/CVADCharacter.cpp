@@ -26,6 +26,7 @@
 #include "GameplayTagsManager.h"
 #include "Misc/ConfigCacheIni.h"
 #include "SkeletalMeshMerge.h"
+#include "Engine/Engine.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogCVADAbilityInput, Log, All);
 
@@ -241,6 +242,7 @@ void ACVADCharacter::HandlePlayerHealthChanged(const FOnAttributeChangeData& Cha
     if (UAbilitySystemComponent* ASC = GetAbilitySystemComponent())
         ASC->AddLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Downed")));
     ApplyDownedState();
+    BeginDownedCountdown();
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->RegisterPlayerDown(); break; }
     UE_LOG(LogCVADAbilityInput, Log, TEXT("Player %s is down"), *GetName());
 }
@@ -248,6 +250,65 @@ void ACVADCharacter::HandlePlayerHealthChanged(const FOnAttributeChangeData& Cha
 void ACVADCharacter::OnRep_PlayerDown()
 {
     ApplyDownedState();
+}
+
+void ACVADCharacter::OnRep_DownedRemaining()
+{
+    OnDownedCountdownChanged(DownedRemainingSeconds);
+}
+
+void ACVADCharacter::BeginDownedCountdown()
+{
+    if (!HasAuthority() || !bPlayerDown) return;
+    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+    {
+        if (It->BattlePhase == ECVADBattlePhase::Results) return;
+        break;
+    }
+    DownedRemainingSeconds = DownedTimeLimit;
+    OnDownedCountdownChanged(DownedRemainingSeconds);
+    GetWorldTimerManager().ClearTimer(DownedCountdownTimer);
+    GetWorldTimerManager().SetTimer(DownedCountdownTimer, this,
+        &ThisClass::TickDownedCountdown, 1.f, true);
+    ForceNetUpdate();
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("Player %s downed countdown started (%.0f s)"),
+        *GetName(), DownedTimeLimit);
+}
+
+void ACVADCharacter::TickDownedCountdown()
+{
+    if (!HasAuthority() || !bPlayerDown)
+    {
+        GetWorldTimerManager().ClearTimer(DownedCountdownTimer);
+        return;
+    }
+    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+    {
+        if (It->BattlePhase == ECVADBattlePhase::Results)
+        {
+            GetWorldTimerManager().ClearTimer(DownedCountdownTimer);
+            return;
+        }
+        break;
+    }
+    DownedRemainingSeconds = FMath::Max(0.f, DownedRemainingSeconds - 1.f);
+    OnDownedCountdownChanged(DownedRemainingSeconds);
+    ForceNetUpdate();
+    if (DownedRemainingSeconds <= 0.f)
+    {
+        ResolveDownedTimeout();
+    }
+}
+
+void ACVADCharacter::ResolveDownedTimeout()
+{
+    GetWorldTimerManager().ClearTimer(DownedCountdownTimer);
+    for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
+    {
+        It->RegisterPlayerDownTimeout();
+        break;
+    }
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("Player %s downed countdown expired; battle lost"), *GetName());
 }
 
 void ACVADCharacter::ApplyDownedState()
@@ -396,9 +457,20 @@ void ACVADCharacter::RevivePlayer(float HealthPercent)
     ASC->SetNumericAttributeBase(UCVADAttributeSet::GetHealthAttribute(), MaxHealth * FMath::Clamp(HealthPercent, 0.1f, 1.f));
     bPlayerDown = false;
     ASC->RemoveLooseGameplayTag(UGameplayTagsManager::Get().RequestGameplayTag(TEXT("State.Downed")));
+    DownedRemainingSeconds = 0.f;
+    OnDownedCountdownChanged(0.f);
+    GetWorldTimerManager().ClearTimer(DownedCountdownTimer);
     ApplyDownedState();
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->RegisterPlayerRevived(); break; }
     UE_LOG(LogCVADAbilityInput, Log, TEXT("Player %s revived"), *GetName());
+}
+
+void ACVADCharacter::ClientNotifyLootCollected_Implementation(const FString& DisplayName, int32 XP, int32 SP)
+{
+    if (!GEngine) return;
+    const FString Message = FString::Printf(TEXT("拾取了 %s：经验 +%d，技能点 +%d"), *DisplayName, XP, SP);
+    GEngine->AddOnScreenDebugMessage(-1, 5.f, FColor::Yellow, Message);
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("%s"), *Message);
 }
 
 void ACVADCharacter::BeginTemporaryInvulnerability(float Duration)
@@ -762,6 +834,7 @@ void ACVADCharacter::GetLifetimeReplicatedProps(TArray<FLifetimeProperty>& OutLi
     Super::GetLifetimeReplicatedProps(OutLifetimeProps);
     DOREPLIFETIME(ACVADCharacter, bFlyingSwordMode);
     DOREPLIFETIME(ACVADCharacter, bPlayerDown);
+    DOREPLIFETIME(ACVADCharacter, DownedRemainingSeconds);
     DOREPLIFETIME(ACVADCharacter, bPlayerHitStunned);
     DOREPLIFETIME(ACVADCharacter, bSprinting);
 }

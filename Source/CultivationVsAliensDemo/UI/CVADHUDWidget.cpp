@@ -55,9 +55,23 @@ void UCVADHUDWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
     if(DownedHintText)
     {
         bool bTeammateDown=false;
-        if(GetWorld()) for(TActorIterator<ACVADCharacter> It(GetWorld());It;++It) if(*It!=LocalCharacter&&It->IsPlayerDown()){bTeammateDown=true;break;}
-        if(LocalCharacter&&LocalCharacter->IsPlayerDown()){DownedHintText->SetText(NSLOCTEXT("CVAD","HUDDown","你已倒地，等待队友救援"));DownedHintText->SetVisibility(ESlateVisibility::Visible);}
-        else if(bTeammateDown){DownedHintText->SetText(NSLOCTEXT("CVAD","HUDRevive","队友已倒地，靠近后按 E 救援"));DownedHintText->SetVisibility(ESlateVisibility::Visible);}
+        float TeammateRemaining=0.f;
+        if(GetWorld()) for(TActorIterator<ACVADCharacter> It(GetWorld());It;++It)
+            if(*It!=LocalCharacter&&It->IsPlayerDown()){bTeammateDown=true;TeammateRemaining=It->GetDownedRemainingSeconds();break;}
+        if(LocalCharacter&&LocalCharacter->IsPlayerDown())
+        {
+            DownedHintText->SetText(FText::Format(
+                NSLOCTEXT("CVAD","HUDDownCountdown","你已倒地！剩余 {0} 秒，等待队友按 E 救援"),
+                FText::AsNumber(FMath::CeilToInt(LocalCharacter->GetDownedRemainingSeconds()))));
+            DownedHintText->SetVisibility(ESlateVisibility::Visible);
+        }
+        else if(bTeammateDown)
+        {
+            DownedHintText->SetText(FText::Format(
+                NSLOCTEXT("CVAD","HUDReviveCountdown","队友已倒地（剩余 {0} 秒），靠近后按 E 救援"),
+                FText::AsNumber(FMath::CeilToInt(TeammateRemaining))));
+            DownedHintText->SetVisibility(ESlateVisibility::Visible);
+        }
         else DownedHintText->SetVisibility(ESlateVisibility::Collapsed);
     }
     if(!BattleDirector.IsValid()&&GetWorld()) for(TActorIterator<ACVADBattleDirector> It(GetWorld());It;++It){BattleDirector=*It;break;}

@@ -2,6 +2,7 @@
 #include "AbilitySystemComponent.h"
 #include "AbilitySystem/CVADAttributeSet.h"
 #include "Battle/CVADBattleDirector.h"
+#include "Battle/CVADLootPickup.h"
 #include "EngineUtils.h"
 #include "Enemy/CVADEnemyAIController.h"
 #include "Battle/CVADMinionSpawner.h"
@@ -22,6 +23,9 @@
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
 #include "Animation/Skeleton.h"
+#include "Camera/CameraActor.h"
+#include "Camera/PlayerCameraManager.h"
+#include "Kismet/GameplayStatics.h"
 
 ACVADEnemyCharacter::ACVADEnemyCharacter()
 {
@@ -193,6 +197,7 @@ void ACVADEnemyCharacter::RestoreMinionAnimationBlueprint()
 void ACVADEnemyCharacter::MakeRagdoll()
 {
     if (!GetMesh() || !GetCapsuleComponent() || !GetCharacterMovement()) return;
+    if (bRagdollFrozen) return;
     GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
     GetMesh()->SetPhysicsBlendWeight(1.f);
     GetMesh()->SetSimulatePhysics(true);
@@ -203,12 +208,131 @@ void ACVADEnemyCharacter::MakeRagdoll()
     GetCapsuleComponent()->SetSimulatePhysics(false);
     GetCharacterMovement()->DisableMovement();
     if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
+    if (HasAuthority())
+    {
+        GetWorldTimerManager().ClearTimer(RagdollFreezeTimer);
+        GetWorldTimerManager().SetTimer(RagdollFreezeTimer, this,
+            &ThisClass::MulticastFreezeRagdoll, RagdollFreezeDelaySeconds, false);
+    }
     UE_LOG(LogTemp, Log, TEXT("Enemy %s became a ragdoll"), *GetName());
 }
 
 void ACVADEnemyCharacter::MulticastRagdoll_Implementation()
 {
     MakeRagdoll();
+}
+
+void ACVADEnemyCharacter::MulticastFreezeRagdoll_Implementation()
+{
+    FreezeRagdoll();
+}
+
+void ACVADEnemyCharacter::FreezeRagdoll()
+{
+    if (!GetMesh() || bRagdollFrozen) return;
+    bRagdollFrozen = true;
+    // Stop simulation and collision but keep the last simulated pose blended so
+    // frozen corpses do not slide into each other or push the player around.
+    GetMesh()->SetAllBodiesSimulatePhysics(false);
+    GetMesh()->SetSimulatePhysics(false);
+    GetMesh()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    GetMesh()->SetCollisionProfileName(TEXT("NoCollision"));
+    if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
+    UE_LOG(LogTemp, Log, TEXT("Enemy %s ragdoll frozen"), *GetName());
+}
+
+void ACVADEnemyCharacter::MulticastBossDeathSequence_Implementation()
+{
+    if (!bIsBoss || bBossDeathSequenceActive) return;
+    bBossDeathSequenceActive = true;
+    BeginBossDeathSlowMotion();
+    StartBossDeathCamera();
+    if (HasAuthority()) SpawnBossLoot();
+}
+
+void ACVADEnemyCharacter::SpawnBossLoot()
+{
+    if (!HasAuthority() || !GetWorld() || !bIsBoss) return;
+    FActorSpawnParameters Params;
+    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    ACVADLootPickup* Loot = GetWorld()->SpawnActor<ACVADLootPickup>(
+        ACVADLootPickup::StaticClass(),
+        GetActorLocation() + FVector(0.f, 0.f, 90.f),
+        FRotator::ZeroRotator,
+        Params);
+    if (Loot)
+    {
+        Loot->InitializeLoot(BossLootExperience, BossLootSkillPoints, TEXT("天穹三使的传承"));
+    }
+}
+
+void ACVADEnemyCharacter::BeginBossDeathSlowMotion()
+{
+    if (!GetWorld()) return;
+    UGameplayStatics::SetGlobalTimeDilation(this, BossDeathSlowMotionTimeDilation);
+    // World timers advance at the dilated rate, so compensate the restore rate by
+    // the dilation to fire after the intended real-time duration.
+    const float RestoreRate = BossDeathSlowMotionDurationSeconds * BossDeathSlowMotionTimeDilation;
+    GetWorldTimerManager().ClearTimer(BossSlowMotionRestoreTimer);
+    GetWorldTimerManager().SetTimer(BossSlowMotionRestoreTimer, this,
+        &ThisClass::EndBossDeathSlowMotion, RestoreRate, false);
+    UE_LOG(LogTemp, Log, TEXT("Boss %s death slow motion Dilation=%.2f RestoreRate=%.2f"),
+        *GetName(), BossDeathSlowMotionTimeDilation, RestoreRate);
+}
+
+void ACVADEnemyCharacter::EndBossDeathSlowMotion()
+{
+    if (GetWorld()) UGameplayStatics::SetGlobalTimeDilation(this, 1.f);
+}
+
+void ACVADEnemyCharacter::StartBossDeathCamera()
+{
+    if (!GetWorld() || !bIsBoss) return;
+
+    APlayerController* LocalPC = nullptr;
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APlayerController* PC = It->Get();
+        if (PC && PC->IsLocalController())
+        {
+            LocalPC = PC;
+            break;
+        }
+    }
+    if (!LocalPC) return;
+
+    const FVector BossLocation = GetActorLocation();
+    const FVector CameraOffset = -GetActorForwardVector() * 430.f + FVector(0.f, 0.f, 190.f);
+    FActorSpawnParameters Params;
+    Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+    DeathCameraActor = GetWorld()->SpawnActor<ACameraActor>(ACameraActor::StaticClass(),
+        FTransform(GetActorRotation(), BossLocation + CameraOffset), Params);
+    if (!DeathCameraActor.IsValid()) return;
+
+    DeathCameraActor->SetActorRotation((BossLocation - DeathCameraActor->GetActorLocation()).Rotation());
+    DeathCameraActor->SetLifeSpan(BossDeathCameraDurationSeconds + 2.f);
+    LocalPC->SetViewTargetWithBlend(DeathCameraActor.Get(), 0.8f, VTBlend_Cubic, 0.f);
+
+    const float RestoreRate = BossDeathCameraDurationSeconds
+        * UGameplayStatics::GetGlobalTimeDilation(this);
+    GetWorldTimerManager().ClearTimer(BossCameraRestoreTimer);
+    GetWorldTimerManager().SetTimer(BossCameraRestoreTimer, this,
+        &ThisClass::EndBossDeathCamera, RestoreRate, false);
+    UE_LOG(LogTemp, Log, TEXT("Boss %s death camera started"), *GetName());
+}
+
+void ACVADEnemyCharacter::EndBossDeathCamera()
+{
+    if (!GetWorld()) return;
+    for (FConstPlayerControllerIterator It = GetWorld()->GetPlayerControllerIterator(); It; ++It)
+    {
+        APlayerController* PC = It->Get();
+        if (PC && PC->IsLocalController() && PC->GetPawn())
+        {
+            PC->SetViewTarget(PC->GetPawn());
+        }
+    }
+    UE_LOG(LogTemp, Log, TEXT("Boss %s death camera restored"), *GetName());
 }
 
 void ACVADEnemyCharacter::OnRep_BossRole(){ApplyBossRoleVisuals();OnBossRoleChanged(BossRole);}
@@ -355,6 +479,7 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
     if (ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(GetController())) AI->CancelPendingAttack();
     if (!bIsBoss) PlayMinionDeathAnimation();
     MulticastRagdoll();
+    if (bIsBoss) MulticastBossDeathSequence();
     if (bIsBoss) for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->CompleteBossBattle(this); break; }
     if (SpawnSource.IsValid()) SpawnSource->NotifySpawnedMinionDefeated(this);
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)

@@ -27,6 +27,11 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="0.05")) float BossAttackWindup = 0.85f;
     UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="25.0")) float MinionTelegraphRadius = 130.f;
     UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="25.0")) float BossTelegraphRadius = 450.f;
+    /** Distance from home at which a minion drops its target and returns. */
+    UPROPERTY(EditDefaultsOnly, Category="AI", meta=(ClampMin="400.0")) float AggroLeashDistance = 1800.f;
+    /** Inside this distance minions circle to the side instead of charging straight in. */
+    UPROPERTY(EditDefaultsOnly, Category="AI", meta=(ClampMin="200.0")) float FlankStartDistance = 700.f;
+    UPROPERTY(EditDefaultsOnly, Category="AI", meta=(ClampMin="50.0")) float FlankOffsetDistance = 240.f;
 
 private:
     TWeakObjectPtr<AActor> CurrentTarget;
@@ -43,6 +48,10 @@ private:
     float PendingAttackRadius = 0.f;
     TWeakObjectPtr<AActor> PendingAttackTarget;
     FTimerHandle AttackWindupTimer;
+    FVector HomeLocation = FVector::ZeroVector;
+    bool bHomeLocationSet = false;
+    int32 FlankDirection = 1;
+    bool bReturningHome = false;
     AActor* FindNearestPlayer() const;
     void AttackTarget(AActor* TargetActor);
     void ResolveTelegraphedAttack();

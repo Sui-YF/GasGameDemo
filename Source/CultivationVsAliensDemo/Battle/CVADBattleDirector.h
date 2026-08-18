@@ -27,6 +27,7 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void UpdateBossHealth(float Current, float Maximum);
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void CompleteBossBattle(class ACVADEnemyCharacter* DefeatedBoss);
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterPlayerDown();
+    UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterPlayerDownTimeout();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterPlayerRevived();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Battle") void RegisterExperienceReward(int32 Amount);
     UFUNCTION(BlueprintPure, Category="Battle") bool IsBossStageReady() const { return BattlePhase == ECVADBattlePhase::Boss; }

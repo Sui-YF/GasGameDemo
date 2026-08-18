@@ -35,6 +35,8 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionDeathAnimation();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss|Animation") void PlayBossAttackAnimation();
     UFUNCTION(BlueprintCallable, Category="Ragdoll") void MakeRagdoll();
+    UFUNCTION(BlueprintPure, Category="Ragdoll") bool IsRagdollFrozen() const { return bRagdollFrozen; }
+    UFUNCTION(BlueprintPure, Category="Boss") bool IsBossDeathSequenceActive() const { return bBossDeathSequenceActive; }
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnEnemyDamaged(float DamageAmount);
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnHitStunChanged(bool bNewHitStunned);
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnAttackTelegraphChanged(bool bActive, FVector Center, float Radius, float Duration);
@@ -56,6 +58,14 @@ protected:
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayBossAttack(int32 AttackRole);
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayMinionAnimation(int32 AnimationType);
     UFUNCTION(NetMulticast, Unreliable) void MulticastRagdoll();
+    UFUNCTION(NetMulticast, Unreliable) void MulticastFreezeRagdoll();
+    UFUNCTION(NetMulticast, Unreliable) void MulticastBossDeathSequence();
+    void FreezeRagdoll();
+    void SpawnBossLoot();
+    void BeginBossDeathSlowMotion();
+    void EndBossDeathSlowMotion();
+    void StartBossDeathCamera();
+    void EndBossDeathCamera();
     void RestoreBossAnimationBlueprint();
     void RestoreMinionAnimationBlueprint();
     UPROPERTY(Transient)
@@ -81,6 +91,19 @@ protected:
     float EnemyMoveSpeedMultiplier = 0.65f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Animation", meta=(ClampMin="0.1", ClampMax="2.0"))
     float EnemyAnimPlayRate = 0.75f;
+    /** Seconds after a ragdoll starts before physics/collision freeze to keep dense waves stable. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Optimization", meta=(ClampMin="0.5", ClampMax="5.0"))
+    float RagdollFreezeDelaySeconds = 2.5f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Death", meta=(ClampMin="0.05", ClampMax="1.0"))
+    float BossDeathSlowMotionTimeDilation = 0.3f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Death", meta=(ClampMin="0.2", ClampMax="5.0"))
+    float BossDeathSlowMotionDurationSeconds = 1.8f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Death", meta=(ClampMin="0.5", ClampMax="8.0"))
+    float BossDeathCameraDurationSeconds = 2.6f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Death", meta=(ClampMin="0"))
+    int32 BossLootExperience = 500;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Death", meta=(ClampMin="0"))
+    int32 BossLootSkillPoints = 2;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HitStunned, Category="Combat") bool bHitStunned = false;
     UFUNCTION() void OnRep_HitStunned();
     void BeginHitStun(float Duration);
@@ -110,7 +133,13 @@ protected:
     void HandleHealthChanged(const FOnAttributeChangeData& ChangeData);
     bool bDeathHandled = false;
     bool bApplyingOneHitKill = false;
+    bool bRagdollFrozen = false;
+    bool bBossDeathSequenceActive = false;
     TWeakObjectPtr<ACVADMinionSpawner> SpawnSource;
+    FTimerHandle RagdollFreezeTimer;
+    FTimerHandle BossSlowMotionRestoreTimer;
+    FTimerHandle BossCameraRestoreTimer;
+    TWeakObjectPtr<class ACameraActor> DeathCameraActor;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UCVADAttributeSet> AttributeSet;

@@ -66,6 +66,18 @@ void ACVADBattleDirector::RegisterPlayerDown()
     ForceNetUpdate();
 }
 
+void ACVADBattleDirector::RegisterPlayerDownTimeout()
+{
+    if (!HasAuthority() || bVictory || bDefeat || BattlePhase == ECVADBattlePhase::Results) return;
+    const ECVADBattlePhase Previous = BattlePhase;
+    bDefeat = true;
+    BattlePhase = ECVADBattlePhase::Results;
+    CompletionTimeSeconds = FMath::Max(0.f, GetWorld()->GetTimeSeconds() - BattleStartTimeSeconds);
+    OnBattlePhaseChanged.Broadcast(Previous, BattlePhase);
+    ForceNetUpdate();
+    UE_LOG(LogTemp, Log, TEXT("Downed player timed out; battle lost"));
+}
+
 void ACVADBattleDirector::RegisterPlayerRevived()
 {
     if (!HasAuthority() || bVictory || bDefeat) return;

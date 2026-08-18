@@ -22,6 +22,12 @@ ACVADEnemyAIController::ACVADEnemyAIController()
 void ACVADEnemyAIController::OnPossess(APawn* InPawn)
 {
     Super::OnPossess(InPawn);
+    if (InPawn)
+    {
+        HomeLocation = InPawn->GetActorLocation();
+        bHomeLocationSet = true;
+        FlankDirection = FMath::FRand() < 0.5f ? -1 : 1;
+    }
 
     UBehaviorTree* Tree = BehaviorTreeAsset.Get();
     if (!Tree)
@@ -87,6 +93,12 @@ bool ACVADEnemyAIController::ExecuteCombatDecision(float DeltaSeconds)
     if (!HasAuthority() || !GetPawn()) return false;
 
     const ACVADEnemyCharacter* ControlledEnemy = Cast<ACVADEnemyCharacter>(GetPawn());
+    const FVector PawnLocation = GetPawn()->GetActorLocation();
+    if (!bHomeLocationSet)
+    {
+        HomeLocation = PawnLocation;
+        bHomeLocationSet = true;
+    }
     if (UBlackboardComponent* BlackboardComponent = GetBlackboardComponent())
     {
         BlackboardComponent->SetValueAsBool(TEXT("IsBoss"), ControlledEnemy && ControlledEnemy->IsBoss());
@@ -127,25 +139,82 @@ bool ACVADEnemyAIController::ExecuteCombatDecision(float DeltaSeconds)
     }
     if (!CurrentTarget.IsValid()) CurrentTarget = FindNearestPlayer();
     AActor* Target = CurrentTarget.Get();
+
+    // Leash: an enemy that wanders too far from its post drops the target and
+    // walks back home, so waves do not chase players across the whole map.
+    if (Target)
+    {
+        const float TargetHomeDistSq = FVector::DistSquared(Target->GetActorLocation(), HomeLocation);
+        if (TargetHomeDistSq > FMath::Square(AggroLeashDistance))
+        {
+            CurrentTarget.Reset();
+            Target = nullptr;
+            if (UBlackboardComponent* BlackboardComponent = GetBlackboardComponent())
+                BlackboardComponent->SetValueAsObject(TEXT("TargetActor"), nullptr);
+        }
+    }
     if (UBlackboardComponent* BlackboardComponent = GetBlackboardComponent())
     {
         BlackboardComponent->SetValueAsObject(TEXT("TargetActor"), Target);
     }
-    if (!Target) return false;
+    if (!Target)
+    {
+        // Return to the home position and wait; the behavior tree keeps ticking
+        // so a player entering aggro range is picked up again immediately.
+        const float HomeDistanceSq = FVector::DistSquared(PawnLocation, HomeLocation);
+        if (HomeDistanceSq > FMath::Square(120.f))
+        {
+            MoveToLocation(HomeLocation, 60.f, true, true, true);
+            bReturningHome = true;
+        }
+        else
+        {
+            StopMovement();
+            bReturningHome = false;
+        }
+        return true;
+    }
+    bReturningHome = false;
 
-    const float Distance = FVector::Dist2D(GetPawn()->GetActorLocation(), Target->GetActorLocation());
+    const float Distance = FVector::Dist2D(PawnLocation, Target->GetActorLocation());
     if (Distance > AttackRange)
     {
-        MoveToActor(Target, AttackRange * 0.75f, true, true, true);
+        if (ControlledEnemy && !ControlledEnemy->IsBoss() && Distance <= FlankStartDistance)
+        {
+            // Circle to the side while closing in so minions do not all stack
+            // in a straight line toward the player.
+            const FVector ToTarget = (Target->GetActorLocation() - PawnLocation).GetSafeNormal2D();
+            const FVector Right = FVector::CrossProduct(FVector::UpVector, ToTarget).GetSafeNormal2D();
+            const FVector FlankGoal = Target->GetActorLocation() + Right * FlankDirection * FlankOffsetDistance;
+            MoveToLocation(FlankGoal, AttackRange * 0.7f, true, true, true);
+            if (FMath::FRand() < 0.04f) FlankDirection = -FlankDirection;
+        }
+        else
+        {
+            MoveToActor(Target, AttackRange * 0.75f, true, true, true);
+        }
     }
     else
     {
-        StopMovement();
-        GetPawn()->SetActorRotation((Target->GetActorLocation() - GetPawn()->GetActorLocation()).Rotation());
-        if (AttackCooldown <= 0.f)
+        if (ControlledEnemy && !ControlledEnemy->IsBoss() && AttackCooldown > 0.35f)
         {
-            AttackTarget(Target);
-            AttackCooldown = AttackInterval;
+            // Strafe sideways while the attack cooldown recharges, then commit
+            // when the next attack is ready.
+            const FVector ToTarget = (Target->GetActorLocation() - PawnLocation).GetSafeNormal2D();
+            const FVector Right = FVector::CrossProduct(FVector::UpVector, ToTarget).GetSafeNormal2D();
+            const FVector StrafeGoal = PawnLocation + Right * FlankDirection * FlankOffsetDistance * 0.6f;
+            MoveToLocation(StrafeGoal, 60.f, true, true, true);
+            if (FMath::FRand() < 0.05f) FlankDirection = -FlankDirection;
+        }
+        else
+        {
+            StopMovement();
+            GetPawn()->SetActorRotation((Target->GetActorLocation() - PawnLocation).Rotation());
+            if (AttackCooldown <= 0.f)
+            {
+                AttackTarget(Target);
+                AttackCooldown = AttackInterval;
+            }
         }
     }
     return true;

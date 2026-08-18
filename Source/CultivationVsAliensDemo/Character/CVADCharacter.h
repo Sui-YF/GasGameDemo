@@ -38,8 +38,11 @@ public:
     UFUNCTION(BlueprintPure, Category="Combat|Stance") bool IsFlyingSwordMode() const { return bFlyingSwordMode; }
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat|Stance") void ToggleFlyingSwordMode();
     UFUNCTION(BlueprintPure, Category="Revive") bool IsPlayerDown() const { return bPlayerDown; }
+    UFUNCTION(BlueprintPure, Category="Revive") float GetDownedRemainingSeconds() const { return DownedRemainingSeconds; }
+    UFUNCTION(BlueprintPure, Category="Revive") float GetDownedTimeLimit() const { return DownedTimeLimit; }
     UFUNCTION(BlueprintPure, Category="Combat") bool IsPlayerHitStunned() const { return bPlayerHitStunned; }
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Revive") void RevivePlayer(float HealthPercent = 0.5f);
+    UFUNCTION(Client, Reliable) void ClientNotifyLootCollected(const FString& DisplayName, int32 XP, int32 SP);
     UFUNCTION(BlueprintCallable, Category="Ragdoll") void MakePlayerRagdoll();
     UFUNCTION(BlueprintCallable, Category="Ragdoll") void RestorePlayerRagdoll();
     UFUNCTION(Server, Reliable) void ServerTryReviveNearbyPlayer();
@@ -66,6 +69,15 @@ protected:
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_PlayerDown, Category="Revive") bool bPlayerDown = false;
     UFUNCTION() void OnRep_PlayerDown();
     void ApplyDownedState();
+    UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_DownedRemaining, Category="Revive") float DownedRemainingSeconds = 0.f;
+    UFUNCTION() void OnRep_DownedRemaining();
+    UFUNCTION(BlueprintImplementableEvent, Category="Revive") void OnDownedCountdownChanged(float RemainingSeconds);
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Revive", meta=(ClampMin="5.0", ClampMax="120.0"))
+    float DownedTimeLimit = 30.f;
+    void BeginDownedCountdown();
+    void TickDownedCountdown();
+    void ResolveDownedTimeout();
+    FTimerHandle DownedCountdownTimer;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_PlayerHitStunned, Category="Combat") bool bPlayerHitStunned = false;
     UFUNCTION() void OnRep_PlayerHitStunned();
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnPlayerHitStunChanged(bool bNewHitStunned);
