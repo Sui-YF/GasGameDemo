@@ -542,8 +542,11 @@ void ACVADPlayerController::ShowCustomKeybindingsScreen() { ShowModalWidget(Cust
 void ACVADPlayerController::ShowSkillTreeScreen()
 {
     const bool bFrontend = GetWorld() && GetWorld()->GetMapName().Contains(TEXT("L_MainMenu"));
-    if (bFrontend) ShowModalWidget(SkillTreeWidgetClass);
-    else UE_LOG(LogCVADInput, Warning, TEXT("Skill tree rejected outside frontend"));
+    // The demo lets players change their skill loadout from the in-game pause
+    // menu as well, so equipping feels instant instead of forcing a main-menu trip.
+    ShowModalWidget(SkillTreeWidgetClass);
+    UE_LOG(LogCVADInput, Log, TEXT("Skill tree opened Frontend=%s"),
+        bFrontend ? TEXT("true") : TEXT("false"));
 }
 void ACVADPlayerController::ShowInventoryScreen() { UE_LOG(LogCVADInput, Log, TEXT("Inventory/equipment feature disabled")); }
 void ACVADPlayerController::ShowSaveSlotsScreen() { ShowModalWidget(SaveSlotsWidgetClass, 50); }

@@ -66,9 +66,9 @@ void ACVADEnemyAIController::ConfigureBossRole(int32 NewBossRole)
 {
     BossRole=FMath::Clamp(NewBossRole,0,2);
     AttackDamage=BaseAttackDamage; AttackInterval=BaseAttackInterval; AttackRange=BaseAttackRange;
-    if(BossRole==0) { AttackDamage*=1.25f; AttackRange=190.f; AttackInterval*=0.9f; }
-    else if(BossRole==1) { AttackDamage*=0.9f; AttackRange=280.f; AttackInterval*=0.7f; }
-    else { AttackDamage*=0.8f; AttackRange=650.f; AttackInterval*=1.25f; BossTelegraphRadius=520.f; }
+    if(BossRole==0) { AttackDamage*=1.05f; AttackRange=185.f; AttackInterval*=1.0f; }
+    else if(BossRole==1) { AttackDamage*=0.8f; AttackRange=270.f; AttackInterval*=0.85f; }
+    else { AttackDamage*=0.7f; AttackRange=620.f; AttackInterval*=1.35f; BossTelegraphRadius=520.f; }
     AttackCooldown=0.35f+BossRole*0.65f;
     UE_LOG(LogTemp,Log,TEXT("Boss AI role configured Role=%d Damage=%.1f Range=%.0f Interval=%.2f"),BossRole,AttackDamage,AttackRange,AttackInterval);
 }
@@ -223,8 +223,8 @@ bool ACVADEnemyAIController::ExecuteCombatDecision(float DeltaSeconds)
 void ACVADEnemyAIController::ApplyBossPhase(int32 Phase)
 {
     ActiveBossPhase = Phase;
-    if (Phase == 2) { AttackInterval *= 0.75f; AttackDamage *= 1.25f; }
-    else if (Phase >= 3) { AttackInterval *= 0.65f; AttackDamage *= 1.35f; AttackRange *= 1.25f; }
+    if (Phase == 2) { AttackInterval *= 0.85f; AttackDamage *= 1.15f; }
+    else if (Phase >= 3) { AttackInterval *= 0.75f; AttackDamage *= 1.2f; AttackRange *= 1.15f; }
 }
 
 AActor* ACVADEnemyAIController::FindNearestPlayer() const

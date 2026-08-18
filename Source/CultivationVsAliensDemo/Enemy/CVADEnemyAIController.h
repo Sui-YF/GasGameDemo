@@ -24,7 +24,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, Category="Combat") float AttackDamage = 8.f;
     UPROPERTY(EditDefaultsOnly, Category="Combat") float AttackInterval = 1.5f;
     UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="0.05")) float MinionAttackWindup = 0.45f;
-    UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="0.05")) float BossAttackWindup = 0.85f;
+    UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="0.05")) float BossAttackWindup = 1.05f;
     UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="25.0")) float MinionTelegraphRadius = 130.f;
     UPROPERTY(EditDefaultsOnly, Category="Combat", meta=(ClampMin="25.0")) float BossTelegraphRadius = 450.f;
     /** Distance from home at which a minion drops its target and returns. */

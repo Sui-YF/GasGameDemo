@@ -45,6 +45,7 @@ void ACVADPlayerState::BeginPlay()
         AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetMaxSpiritAttribute(), Row->MaxSpirit);
         AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetSpiritAttribute(), Row->MaxSpirit);
     }
+    if (HasAuthority()) ApplyDemoFullProfile();
     if (HasAuthority()) InitializeDefaultSkillLoadout();
     if (HasAuthority()) GetWorldTimerManager().SetTimer(ResourceRegenTimer, this, &ThisClass::RegenerateResources, 0.25f, true);
 }
@@ -143,6 +144,30 @@ void ACVADPlayerState::ApplyLevelGrowth()
         PlayerLevel, NewMaxHealth, NewMaxStamina, NewMaxSpirit);
 }
 
+void ACVADPlayerState::ApplyDemoFullProfile()
+{
+    if (!HasAuthority() || !bDemoFullProfile || !AbilitySystemComponent || !AttributeSet) return;
+    const int32 LevelsToGrow = FMath::Max(0, DemoPlayerLevel - PlayerLevel);
+    PlayerLevel = FMath::Clamp(DemoPlayerLevel, 1, 50);
+    SkillPoints = FMath::Max(0, DemoSkillPoints);
+    UDataTable* SkillTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/CVAD/Data/DT_Skills.DT_Skills"));
+    if (SkillTable)
+    {
+        for (const FName RowName : SkillTable->GetRowNames())
+        {
+            UnlockedSkillRows.AddUnique(RowName);
+        }
+    }
+    for (int32 Index = 0; Index < LevelsToGrow; ++Index)
+    {
+        ApplyLevelGrowth();
+    }
+    ForceNetUpdate();
+    OnSkillLoadoutChanged.Broadcast();
+    UE_LOG(LogCVADSkills, Log, TEXT("Demo full profile applied Level=%d Points=%d Unlocked=%d"),
+        PlayerLevel, SkillPoints, UnlockedSkillRows.Num());
+}
+
 void ACVADPlayerState::InitializeDefaultSkillLoadout()
 {
     if (!HasAuthority()) return;
@@ -231,6 +256,10 @@ void ACVADPlayerState::RestoreProfileAuthority(int32 InLevel, int32 InExperience
         EquipSkillAuthority(static_cast<ECVADAbilityInput>(Index), InEquippedSkills[Index]);
     InitializeDefaultSkillLoadout();
     if (InventoryComponent) InventoryComponent->RestoreInventory(InUnlockedItems, InEquipment);
+    // Demo mode overrides the restored profile so the player always has the full
+    // level, points and every skill unlocked, then re-levels equipped abilities.
+    ApplyDemoFullProfile();
+    RefreshEquippedAbilityLevels();
     ForceNetUpdate(); OnSkillLoadoutChanged.Broadcast();
     UE_LOG(LogCVADSkills, Log, TEXT("Restored profile Level=%d XP=%d Skills=%d Items=%d"), PlayerLevel, Experience, UnlockedSkillRows.Num(), InUnlockedItems.Num());
 }

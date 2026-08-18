@@ -104,6 +104,9 @@ protected:
     int32 BossLootExperience = 500;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Death", meta=(ClampMin="0"))
     int32 BossLootSkillPoints = 2;
+    /** Demo tuning: bosses keep their readable telegraphs but take noticeably less punishment to defeat. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss", meta=(ClampMin="0.1", ClampMax="1.0"))
+    float BossHealthMultiplier = 0.8f;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HitStunned, Category="Combat") bool bHitStunned = false;
     UFUNCTION() void OnRep_HitStunned();
     void BeginHitStun(float Duration);

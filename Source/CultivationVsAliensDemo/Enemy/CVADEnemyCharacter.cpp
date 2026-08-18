@@ -399,8 +399,9 @@ void ACVADEnemyCharacter::BeginPlay()
     UDataTable* BalanceTable = LoadObject<UDataTable>(nullptr, TEXT("/Game/CVAD/Data/DT_EnemyBalance.DT_EnemyBalance"));
     if (const FCVADEnemyBalanceRow* Row = BalanceTable ? BalanceTable->FindRow<FCVADEnemyBalanceRow>(BalanceRowName, TEXT("EnemyBeginPlay")) : nullptr)
     {
-        AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetMaxHealthAttribute(), Row->MaxHealth);
-        AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetHealthAttribute(), Row->MaxHealth);
+        const float EffectiveMaxHealth = Row->MaxHealth * (bIsBoss ? BossHealthMultiplier : 1.f);
+        AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetMaxHealthAttribute(), EffectiveMaxHealth);
+        AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetHealthAttribute(), EffectiveMaxHealth);
         GetCharacterMovement()->MaxWalkSpeed = Row->MoveSpeed * EnemyMoveSpeedMultiplier;
         if (bIsBoss)
         {

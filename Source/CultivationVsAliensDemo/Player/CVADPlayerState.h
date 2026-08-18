@@ -41,6 +41,12 @@ public:
     UPROPERTY(BlueprintReadOnly, Replicated, Category="Progression") int32 Experience = 0;
     /** Demo budget: enough points to test every purchasable skill in one session. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Replicated, Category="Progression") int32 SkillPoints = 99;
+    /** Demo mode grants a complete profile so every skill can be equipped directly. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Progression|Demo") bool bDemoFullProfile = true;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Progression|Demo", meta=(ClampMin="1", ClampMax="50"))
+    int32 DemoPlayerLevel = 50;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Progression|Demo", meta=(ClampMin="0"))
+    int32 DemoSkillPoints = 999;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_LobbyReady, Category="Lobby") bool bLobbyReady = false;
     UFUNCTION(BlueprintCallable, Category="Lobby") void SetLobbyReady(bool bReady);
     void RequestRestoreProfile(int32 InLevel, int32 InExperience, int32 InSkillPoints,
@@ -69,6 +75,7 @@ private:
     void RestoreProfileAuthority(int32 InLevel, int32 InExperience, int32 InSkillPoints,
         const TArray<FName>& InUnlockedSkills, const TArray<FName>& InEquippedSkills,
         const TArray<FName>& InUnlockedItems, const FCVADEquipmentLoadout& InEquipment);
+    void ApplyDemoFullProfile();
     UFUNCTION() void OnRep_EquippedSkills();
     bool EquipSkillAuthority(ECVADAbilityInput Slot, FName SkillRowName);
     TArray<FGameplayAbilitySpecHandle> EquippedAbilityHandles;
