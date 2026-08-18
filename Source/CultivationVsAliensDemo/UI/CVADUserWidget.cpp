@@ -25,6 +25,7 @@
 #include "Input/Reply.h"
 #include "Components/Viewport.h"
 #include "Character/CVADCharacter.h"
+#include "Engine/Engine.h"
 
 static const TCHAR* CVADAudioConfigSection = TEXT("CVAD.AudioSettings");
 static const TCHAR* CVADSaveConfigSection = TEXT("CVAD.SaveSlots");
@@ -107,17 +108,7 @@ void UCVADUserWidget::NativeConstruct()
     if (GetClass()->GetName().Contains(TEXT("WBP_SaveSlots"))) { SelectedSaveSlot=GetLastUsedProfileSlot(); RefreshSaveSlotPreviews(); }
     if (GetClass()->GetName().Contains(TEXT("WBP_SkillTree")))
     {
-        if (UViewport* Preview = Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_SkillPreview"))))
-        {
-            Preview->SetBackgroundColor(FLinearColor(0.01f, 0.018f, 0.035f, 1.f));
-            Preview->SetShowFlag(TEXT("PostProcessing"), false);
-            Preview->SetShowFlag(TEXT("Bloom"), false);
-            Preview->SetShowFlag(TEXT("DepthOfField"), false);
-            TSubclassOf<ACVADCharacter> PreviewClass = LoadClass<ACVADCharacter>(
-                nullptr, TEXT("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter.BP_LanfangCharacter_C"));
-            SkillPreviewCharacter = Cast<ACVADCharacter>(Preview->Spawn(PreviewClass.Get() ? PreviewClass.Get() : ACVADCharacter::StaticClass()));
-            if (SkillPreviewCharacter) SkillPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
-        }
+        SetupSkillPreviewViewport();
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack1")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack1);
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack2")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack2);
         if(UButton* B=Cast<UButton>(GetWidgetFromName(TEXT("Button_SwordAttack3")))) B->OnClicked.AddUniqueDynamic(this,&ThisClass::SelectSwordAttack3);
@@ -153,6 +144,18 @@ void UCVADUserWidget::NativeConstruct()
             RefreshKeyBindingLabels();
         }
         SetIsFocusable(true);
+    }
+}
+
+void UCVADUserWidget::NativeTick(const FGeometry& MyGeometry, float InDeltaTime)
+{
+    Super::NativeTick(MyGeometry, InDeltaTime);
+    // In the widget designer the Slate viewport may not be ready on the first
+    // NativeConstruct pass; retry until the preview character is spawned so the
+    // skill preview is visible while editing the Blueprint.
+    if (IsDesignTime() && GetClass()->GetName().Contains(TEXT("WBP_SkillTree")) && !SkillPreviewCharacter)
+    {
+        SetupSkillPreviewViewport();
     }
 }
 
@@ -271,6 +274,129 @@ FReply UCVADUserWidget::NativeOnPreviewKeyDown(const FGeometry& InGeometry, cons
     if (bSuccess) RefreshKeyBindingLabels();
     PendingRebindAction=NAME_None;
     return FReply::Handled();
+}
+
+FReply UCVADUserWidget::NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent)
+{
+    if (GetClass()->GetName().Contains(TEXT("WBP_SkillTree")))
+    {
+        const FKey Key = InKeyEvent.GetKey();
+        if (Key == EKeys::F7)
+        {
+            ToggleSkillPreviewDebugMode();
+            return FReply::Handled();
+        }
+        if (bSkillPreviewDebugMode && HandleSkillPreviewCameraKey(Key))
+        {
+            return FReply::Handled();
+        }
+    }
+    return Super::NativeOnKeyDown(InGeometry, InKeyEvent);
+}
+
+void UCVADUserWidget::SetupSkillPreviewViewport()
+{
+    if (SkillPreviewCharacter) return;
+    UViewport* Preview = Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_SkillPreview")));
+    if (!Preview) return;
+
+    Preview->SetBackgroundColor(FLinearColor(0.01f, 0.018f, 0.035f, 1.f));
+    Preview->SetShowFlag(TEXT("PostProcessing"), false);
+    Preview->SetShowFlag(TEXT("Bloom"), false);
+    Preview->SetShowFlag(TEXT("DepthOfField"), false);
+
+    TSubclassOf<ACVADCharacter> PreviewClass = LoadClass<ACVADCharacter>(
+        nullptr, TEXT("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter.BP_LanfangCharacter_C"));
+    SkillPreviewCharacter = Cast<ACVADCharacter>(Preview->Spawn(
+        PreviewClass.Get() ? PreviewClass.Get() : ACVADCharacter::StaticClass()));
+    if (!SkillPreviewCharacter) return;
+
+    SkillPreviewCharacter->ApplyAppearanceSelection(PreviewOutfitParts);
+    SkillPreviewCameraDistanceDebug = SkillPreviewCameraDistance;
+    SkillPreviewCameraHeightDebug = SkillPreviewCameraHeight;
+    SkillPreviewCameraYawDegreesDebug = SkillPreviewCameraYawDegrees;
+    ApplySkillPreviewCamera();
+    SetIsFocusable(true);
+    if (!IsDesignTime()) SetKeyboardFocus();
+}
+
+void UCVADUserWidget::ApplySkillPreviewCamera()
+{
+    UViewport* Preview = Cast<UViewport>(GetWidgetFromName(TEXT("Viewport_SkillPreview")));
+    if (!Preview) return;
+
+    SkillPreviewCameraDistanceDebug = FMath::Clamp(SkillPreviewCameraDistanceDebug, 70.f, 500.f);
+    SkillPreviewCameraHeightDebug = FMath::Clamp(SkillPreviewCameraHeightDebug, 20.f, 280.f);
+    const FVector CharacterOrigin = SkillPreviewCharacter
+        ? SkillPreviewCharacter->GetActorLocation() : FVector::ZeroVector;
+
+    // Keep the model front-facing: the character turns toward the camera and the
+    // camera orbits around it, looking at the upper torso.
+    if (SkillPreviewCharacter)
+    {
+        const float YawRad = FMath::DegreesToRadians(SkillPreviewCameraYawDegreesDebug);
+        const FVector CameraOffset = FVector(FMath::Cos(YawRad), FMath::Sin(YawRad), 0.f)
+            * SkillPreviewCameraDistanceDebug + FVector(0.f, 0.f, SkillPreviewCameraHeightDebug);
+        const FVector FacingDirection = CameraOffset.GetSafeNormal2D();
+        if (!FacingDirection.IsNearlyZero()) SkillPreviewCharacter->SetActorRotation(FacingDirection.Rotation());
+    }
+
+    const float YawRad = FMath::DegreesToRadians(SkillPreviewCameraYawDegreesDebug);
+    const FVector CameraLocation = CharacterOrigin
+        + FVector(FMath::Cos(YawRad), FMath::Sin(YawRad), 0.f) * SkillPreviewCameraDistanceDebug
+        + FVector(0.f, 0.f, SkillPreviewCameraHeightDebug);
+    const FVector LookAtPoint = CharacterOrigin + FVector(0.f, 0.f, 35.f);
+    Preview->SetViewLocation(CameraLocation);
+    Preview->SetViewRotation((LookAtPoint - CameraLocation).Rotation());
+
+    if (bSkillPreviewDebugMode) ShowSkillPreviewDebugInfo();
+}
+
+bool UCVADUserWidget::HandleSkillPreviewCameraKey(const FKey& Key)
+{
+    if (Key == EKeys::Left) { SkillPreviewCameraYawDegreesDebug -= 3.f; ApplySkillPreviewCamera(); return true; }
+    if (Key == EKeys::Right) { SkillPreviewCameraYawDegreesDebug += 3.f; ApplySkillPreviewCamera(); return true; }
+    if (Key == EKeys::Up) { SkillPreviewCameraHeightDebug += 8.f; ApplySkillPreviewCamera(); return true; }
+    if (Key == EKeys::Down) { SkillPreviewCameraHeightDebug -= 8.f; ApplySkillPreviewCamera(); return true; }
+    if (Key == EKeys::W) { SkillPreviewCameraDistanceDebug -= 12.f; ApplySkillPreviewCamera(); return true; }
+    if (Key == EKeys::S) { SkillPreviewCameraDistanceDebug += 12.f; ApplySkillPreviewCamera(); return true; }
+    if (Key == EKeys::R)
+    {
+        SkillPreviewCameraDistanceDebug = SkillPreviewCameraDistance;
+        SkillPreviewCameraHeightDebug = SkillPreviewCameraHeight;
+        SkillPreviewCameraYawDegreesDebug = SkillPreviewCameraYawDegrees;
+        ApplySkillPreviewCamera();
+        return true;
+    }
+    return false;
+}
+
+void UCVADUserWidget::ToggleSkillPreviewDebugMode()
+{
+    bSkillPreviewDebugMode = !bSkillPreviewDebugMode;
+    if (!GEngine) return;
+    static constexpr uint64 DebugKey = 0x5A117;
+    if (bSkillPreviewDebugMode)
+    {
+        GEngine->AddOnScreenDebugMessage(DebugKey, 30.f, FColor::Yellow,
+            TEXT("技能预览调参模式：←→ 环绕   ↑↓ 高度   W/S 距离   R 重置   F7 退出"));
+        ShowSkillPreviewDebugInfo();
+    }
+    else
+    {
+        GEngine->RemoveOnScreenDebugMessage(DebugKey);
+        GEngine->AddOnScreenDebugMessage(DebugKey, 3.f, FColor::Green, TEXT("已退出技能预览调参模式"));
+    }
+}
+
+void UCVADUserWidget::ShowSkillPreviewDebugInfo()
+{
+    if (!GEngine) return;
+    static constexpr uint64 DebugKey = 0x5A117;
+    const FString Info = FString::Printf(
+        TEXT("当前镜头：距离=%.0f  高度=%.0f  环绕角=%.0f°"),
+        SkillPreviewCameraDistanceDebug, SkillPreviewCameraHeightDebug, SkillPreviewCameraYawDegreesDebug);
+    GEngine->AddOnScreenDebugMessage(DebugKey, 2.f, FColor::Cyan, Info);
 }
 
 void UCVADUserWidget::HandlePauseResumeClicked() { ResumeGame(); }

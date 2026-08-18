@@ -16,6 +16,8 @@ class CULTIVATIONVSALIENSDEMO_API UCVADUserWidget : public UUserWidget
 public:
     virtual void NativeConstruct() override;
     virtual FReply NativeOnPreviewKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+    virtual FReply NativeOnKeyDown(const FGeometry& InGeometry, const FKeyEvent& InKeyEvent) override;
+    virtual void NativeTick(const FGeometry& MyGeometry, float InDeltaTime) override;
     UFUNCTION(BlueprintCallable, Category="UI") void InitializeFromOwningPlayer();
     UFUNCTION(BlueprintPure, Category="UI") ACVADPlayerState* GetCVADPlayerState() const { return CachedPlayerState; }
     UFUNCTION(BlueprintPure, Category="UI") UCVADInventoryComponent* GetInventory() const;
@@ -47,6 +49,13 @@ protected:
     /** Outfit preview camera, editable in WBP_OutfitSelect Class Defaults. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Outfit Preview") FVector OutfitPreviewCameraLocation = FVector(210.f, 0.f, 35.f);
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Outfit Preview") FRotator OutfitPreviewCameraRotation = FRotator(0.f, 180.f, 0.f);
+    /** Skill preview camera (distance/height/yaw around the character), editable in WBP_SkillTree Class Defaults. */
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Skill Preview", meta=(ClampMin="70.0", ClampMax="500.0"))
+    float SkillPreviewCameraDistance = 210.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Skill Preview", meta=(ClampMin="20.0", ClampMax="280.0"))
+    float SkillPreviewCameraHeight = 90.f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Skill Preview", meta=(ClampMin="-180.0", ClampMax="180.0"))
+    float SkillPreviewCameraYawDegrees = 0.f;
 
     UFUNCTION(BlueprintImplementableEvent, Category="UI") void OnPlayerDataReady();
 private:
@@ -96,6 +105,11 @@ private:
     void SelectSkill(FName SkillRowName);
     void RefreshSkillDetails();
     void PlaySkillPreviewAnimation(FName SkillRowName);
+    void ApplySkillPreviewCamera();
+    void SetupSkillPreviewViewport();
+    bool HandleSkillPreviewCameraKey(const FKey& Key);
+    void ToggleSkillPreviewDebugMode();
+    void ShowSkillPreviewDebugInfo();
     void BeginKeyCapture(FName ActionName);
     void InitializeSettingsControls();
     void RefreshKeyBindingLabels();
@@ -108,5 +122,9 @@ private:
     int32 PreviewOutfitParts[7] = {0,0,0,0,0,0,0};
     UPROPERTY(Transient) TObjectPtr<ACVADCharacter> OutfitPreviewCharacter;
     UPROPERTY(Transient) TObjectPtr<ACVADCharacter> SkillPreviewCharacter;
+    float SkillPreviewCameraDistanceDebug = 210.f;
+    float SkillPreviewCameraHeightDebug = 90.f;
+    float SkillPreviewCameraYawDegreesDebug = 0.f;
+    bool bSkillPreviewDebugMode = false;
     void ChangeOutfitPart(int32 Part,int32 Direction);
 };
