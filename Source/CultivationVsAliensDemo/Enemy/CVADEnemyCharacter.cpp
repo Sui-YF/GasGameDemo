@@ -19,6 +19,7 @@
 #include "DrawDebugHelpers.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/StaticMeshComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
@@ -27,6 +28,8 @@
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
 #include "UObject/UnrealType.h"
+#include "Engine/StaticMesh.h"
+#include "UObject/ConstructorHelpers.h"
 
 ACVADEnemyCharacter::ACVADEnemyCharacter()
 {
@@ -45,6 +48,13 @@ ACVADEnemyCharacter::ACVADEnemyCharacter()
     AngelWingRight->SetupAttachment(GetMesh()); AngelWingRight->SetCollisionEnabled(ECollisionEnabled::NoCollision);
     AngelSword=CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("AngelSword"));
     AngelSword->SetupAttachment(GetMesh(),TEXT("Weapon_r")); AngelSword->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    MinionSwordMesh=CreateDefaultSubobject<UStaticMeshComponent>(TEXT("MinionSword"));
+    MinionSwordMesh->SetupAttachment(GetMesh());
+    MinionSwordMesh->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    static ConstructorHelpers::FObjectFinder<UStaticMesh> MinionSwordAsset(
+        TEXT("/Game/SkeletonArmy/Meshes/Footman/SM_SkeletonSword.SM_SkeletonSword"));
+    if (MinionSwordAsset.Succeeded()) MinionSwordMesh->SetStaticMesh(MinionSwordAsset.Object);
+    MinionSwordMesh->SetVisibility(false, true);
     // Demo/debug phase: keep enemies visible regardless of camera distance.
     GetMesh()->SetCullDistance(0.f);
     GetMesh()->VisibilityBasedAnimTickOption = EVisibilityBasedAnimTickOption::OnlyTickPoseWhenRendered;
@@ -120,6 +130,35 @@ void ACVADEnemyCharacter::SetAnimInstanceBool(UAnimInstance* AnimInstance, FName
 void ACVADEnemyCharacter::SetSpawnSource(ACVADMinionSpawner* InSpawnSource)
 {
     SpawnSource = InSpawnSource;
+}
+
+void ACVADEnemyCharacter::AttachMinionWeapon()
+{
+    if (bIsBoss || !GetMesh() || !MinionSwordMesh || !MinionSwordMesh->GetStaticMesh()) return;
+
+    static const FName SocketCandidates[] = {
+        TEXT("WeaponRight_Socket"), TEXT("hand_r"), TEXT("WeaponLeft_Socket"),
+        TEXT("hand_l"), TEXT("Weapon_r"), TEXT("RightHand"), TEXT("Hand_R"), TEXT("weapon")};
+
+    FName Chosen = MinionWeaponSocket;
+    if (GetMesh()->GetSocketByName(Chosen) == nullptr)
+    {
+        Chosen = NAME_None;
+        for (const FName Candidate : SocketCandidates)
+        {
+            if (GetMesh()->GetSocketByName(Candidate)) { Chosen = Candidate; break; }
+        }
+    }
+    if (Chosen.IsNone())
+    {
+        UE_LOG(LogTemp, Warning, TEXT("Minion %s no weapon socket found on skeleton"), *GetName());
+        return;
+    }
+
+    MinionSwordMesh->AttachToComponent(GetMesh(),
+        FAttachmentTransformRules::SnapToTargetIncludingScale, Chosen);
+    MinionSwordMesh->SetVisibility(true, true);
+    UE_LOG(LogTemp, Log, TEXT("Minion %s weapon attached to socket %s"), *GetName(), *Chosen.ToString());
 }
 
 void ACVADEnemyCharacter::SetBossRole(int32 NewRole)
@@ -441,6 +480,7 @@ void ACVADEnemyCharacter::BeginPlay()
             *GetActorLocation().ToCompactString(),*GetActorScale3D().ToCompactString());
         UE_LOG(LogTemp, Log, TEXT("Enemy %s AnimClass=%s"),
             *GetName(), GetMesh()->GetAnimClass() ? *GetMesh()->GetAnimClass()->GetName() : TEXT("None"));
+        AttachMinionWeapon();
     }
     if(AngelWingLeft) AngelWingLeft->SetVisibility(bIsBoss,true);
     if(AngelWingRight) AngelWingRight->SetVisibility(bIsBoss,true);

@@ -8,6 +8,7 @@ class UAbilitySystemComponent;
 class UCVADAttributeSet;
 class ACVADMinionSpawner;
 class UAnimInstance;
+class UStaticMeshComponent;
 struct FOnAttributeChangeData;
 
 UCLASS(Blueprintable)
@@ -36,6 +37,7 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionDeathAnimation();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss|Animation") void PlayBossAttackAnimation();
     UFUNCTION(BlueprintCallable, Category="Ragdoll") void MakeRagdoll();
+    void AttachMinionWeapon();
     void UpdateMinionLocomotion();
     void SetAnimInstanceFloat(UAnimInstance* AnimInstance, FName PropertyName, float Value);
     void SetAnimInstanceBool(UAnimInstance* AnimInstance, FName PropertyName, bool Value);
@@ -49,6 +51,8 @@ protected:
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Boss|Angel") TObjectPtr<class USkeletalMeshComponent> AngelWingLeft;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Boss|Angel") TObjectPtr<class USkeletalMeshComponent> AngelWingRight;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Boss|Angel") TObjectPtr<class USkeletalMeshComponent> AngelSword;
+    UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Minion|Weapon") TObjectPtr<UStaticMeshComponent> MinionSwordMesh;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Minion|Weapon") FName MinionWeaponSocket = TEXT("WeaponRight_Socket");
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> SwordBossAttack;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> WingBossAttack;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Animation") TObjectPtr<class UAnimSequenceBase> CasterBossAttack;

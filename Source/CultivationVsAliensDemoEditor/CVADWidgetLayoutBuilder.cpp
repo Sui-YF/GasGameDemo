@@ -32,6 +32,7 @@
 #include "AnimGraphNode_Slot.h"
 #include "AnimGraphNode_LayeredBoneBlend.h"
 #include "Animation/Skeleton.h"
+#include "Engine/SkeletalMeshSocket.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "BehaviorTree/BlackboardData.h"
 #include "BehaviorTree/Blackboard/BlackboardKeyType_Object.h"
@@ -720,6 +721,110 @@ static void RepairMinionLocomotionVariable(UAnimBlueprint* Blueprint)
         *Blueprint->GetPathName());
 }
 
+static bool RebuildMinionAnimGraph(UAnimBlueprint* Blueprint)
+{
+    if (!Blueprint) return false;
+    UBlendSpace1D* Blend = LoadObject<UBlendSpace1D>(nullptr,
+        TEXT("/Game/CVAD/Animations/BS_SkeletonMinion.BS_SkeletonMinion"));
+    if (!Blend) return false;
+
+    UEdGraph* AnimGraph = nullptr;
+    TArray<UEdGraph*> Graphs;
+    Blueprint->GetAllGraphs(Graphs);
+    for (UEdGraph* Graph : Graphs)
+    {
+        TArray<UAnimGraphNode_Root*> Roots;
+        Graph->GetNodesOfClass(Roots);
+        if (Roots.Num() == 1) { AnimGraph = Graph; break; }
+    }
+    if (!AnimGraph) return false;
+
+    // Replace the fragile duplicated state machine with a minimal, guaranteed
+    // graph: Root -> FullBody slot -> BlendSpacePlayer(BS_SkeletonMinion, Speed).
+    for (int32 Index = AnimGraph->Nodes.Num() - 1; Index >= 0; --Index)
+    {
+        if (UEdGraphNode* Node = AnimGraph->Nodes[Index])
+        {
+            Node->DestroyNode();
+        }
+    }
+    AnimGraph->Nodes.Reset();
+
+    FGraphNodeCreator<UAnimGraphNode_Root> RootCreator(*AnimGraph);
+    UAnimGraphNode_Root* Root = RootCreator.CreateNode();
+    Root->NodePosX = 0; Root->NodePosY = 0;
+    RootCreator.Finalize();
+
+    FGraphNodeCreator<UAnimGraphNode_Slot> SlotCreator(*AnimGraph);
+    UAnimGraphNode_Slot* Slot = SlotCreator.CreateNode();
+    Slot->Node.SlotName = TEXT("FullBody");
+    Slot->Node.bAlwaysUpdateSourcePose = true;
+    Slot->NodePosX = -420; Slot->NodePosY = 0;
+    SlotCreator.Finalize();
+
+    FGraphNodeCreator<UAnimGraphNode_BlendSpacePlayer> BSCreator(*AnimGraph);
+    UAnimGraphNode_BlendSpacePlayer* BSPlayer = BSCreator.CreateNode();
+    BSPlayer->Node.SetBlendSpace(Blend);
+    BSPlayer->NodePosX = -840; BSPlayer->NodePosY = 0;
+    BSCreator.Finalize();
+
+    UEdGraphPin* BSPosePin = BSPlayer->FindPin(TEXT("Pose"));
+    UEdGraphPin* SlotSourcePin = Slot->FindPin(TEXT("Source"));
+    UEdGraphPin* SlotPosePin = Slot->FindPin(TEXT("Pose"));
+    UEdGraphPin* RootResultPin = Root->FindPin(TEXT("Result"));
+    if (!BSPosePin || !SlotSourcePin || !SlotPosePin || !RootResultPin) return false;
+
+    const UEdGraphSchema* Schema = AnimGraph->GetSchema();
+    Schema->TryCreateConnection(BSPosePin, SlotSourcePin);
+    Schema->TryCreateConnection(SlotPosePin, RootResultPin);
+
+    UK2Node_VariableGet* VarGet = NewObject<UK2Node_VariableGet>(AnimGraph);
+    VarGet->SetFlags(RF_Transient);
+    VarGet->VariableReference.SetSelfMember(TEXT("Speed"));
+    VarGet->NodePosX = -1100; VarGet->NodePosY = -240;
+    AnimGraph->AddNode(VarGet, false, false);
+    VarGet->PostPlacedNewNode();
+    VarGet->AllocateDefaultPins();
+
+    UEdGraphPin* VarOutPin = VarGet->FindPin(TEXT("Speed"));
+    UEdGraphPin* BSXPin = BSPlayer->FindPin(TEXT("X"));
+    if (!VarOutPin || !BSXPin) return false;
+    Schema->TryCreateConnection(VarOutPin, BSXPin);
+
+    UE_LOG(LogTemp, Display, TEXT("CVAD rebuilt minion AnimGraph: Root -> FullBody slot -> BS_SkeletonMinion(Speed)"));
+    return true;
+}
+
+bool UCVADEditorAssetBuilder::DiagnoseSkeletonSockets()
+{
+    USkeleton* Skeleton = LoadObject<USkeleton>(nullptr,
+        TEXT("/Game/SkeletonArmy/Characters/Footman/SkeletonFootman_Skeleton.SkeletonFootman_Skeleton"));
+    if (!Skeleton)
+    {
+        UE_LOG(LogTemp, Error, TEXT("CVAD_SOCKET skeleton missing"));
+        return false;
+    }
+    for (const USkeletalMeshSocket* Socket : Skeleton->Sockets)
+    {
+        if (Socket)
+        {
+            UE_LOG(LogTemp, Display, TEXT("CVAD_SOCKET %s bone=%s"),
+                *Socket->SocketName.ToString(), *Socket->BoneName.ToString());
+        }
+    }
+    const FReferenceSkeleton& Ref = Skeleton->GetReferenceSkeleton();
+    for (int32 Index = 0; Index < Ref.GetNum(); ++Index)
+    {
+        const FString Bone = Ref.GetBoneName(Index).ToString().ToLower();
+        if (Bone.Contains(TEXT("hand")) || Bone.Contains(TEXT("weapon")) ||
+            Bone.Contains(TEXT("wrist")) || Bone.Contains(TEXT("sword")))
+        {
+            UE_LOG(LogTemp, Display, TEXT("CVAD_BONE %s"), *Ref.GetBoneName(Index).ToString());
+        }
+    }
+    return true;
+}
+
 bool UCVADEditorAssetBuilder::BuildMinionAnimationBlueprint()
 {
     UAnimBlueprint* SourceBlueprint=LoadObject<UAnimBlueprint>(nullptr,
@@ -941,14 +1046,19 @@ bool UCVADEditorAssetBuilder::RepairAnimationBlueprints()
             bAllRepaired = false;
             continue;
         }
-        if (!RepairCombatSlotGraph(Blueprint))
-        {
-            UE_LOG(LogTemp, Warning, TEXT("CVAD_ANIM_REPAIR could not ensure combat slot in %s"), *Blueprint->GetPathName());
-            bAllRepaired = false;
-        }
         if (FString(Path).Contains(TEXT("ABP_SkeletonMinion")))
         {
             RepairMinionLocomotionVariable(Blueprint);
+            if (!RebuildMinionAnimGraph(Blueprint))
+            {
+                UE_LOG(LogTemp, Warning, TEXT("CVAD_ANIM_REPAIR could not rebuild minion anim graph in %s"), *Blueprint->GetPathName());
+                bAllRepaired = false;
+            }
+        }
+        else if (!RepairCombatSlotGraph(Blueprint))
+        {
+            UE_LOG(LogTemp, Warning, TEXT("CVAD_ANIM_REPAIR could not ensure combat slot in %s"), *Blueprint->GetPathName());
+            bAllRepaired = false;
         }
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
         FKismetEditorUtilities::CompileBlueprint(Blueprint);
@@ -964,18 +1074,9 @@ bool UCVADEditorAssetBuilder::RepairAnimationBlueprints()
         if (FString(Path).Contains(TEXT("ABP_SkeletonMinion")))
         {
             UClass* GeneratedClass = Blueprint->GeneratedClass;
-            FString Props;
-            if (GeneratedClass)
-            {
-                for (TFieldIterator<FProperty> It(GeneratedClass); It; ++It)
-                {
-                    Props += FString::Printf(TEXT("%s(%s),"), *It->GetName(), *It->GetClass()->GetName());
-                }
-            }
-            UE_LOG(LogTemp, Display, TEXT("CVAD minion generated class %s speed_float=%d props=[%s]"),
+            UE_LOG(LogTemp, Display, TEXT("CVAD minion generated class %s speed_float=%d"),
                 *GetNameSafe(GeneratedClass),
-                GeneratedClass ? (FindFProperty<FFloatProperty>(GeneratedClass, TEXT("Speed")) ? 1 : 0) : -1,
-                *Props);
+                GeneratedClass ? (FindFProperty<FFloatProperty>(GeneratedClass, TEXT("Speed")) ? 1 : 0) : -1);
         }
     }
 

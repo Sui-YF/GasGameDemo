@@ -19,6 +19,7 @@ public:
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool DiagnoseAnimationBlueprints();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool RepairAnimationBlueprints();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool BuildEnemyAIAssets();
+    UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool DiagnoseSkeletonSockets();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool BuildAllUIControlSkeletons();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool UpdateUIBackButtons();
     UFUNCTION(BlueprintCallable, Category="CVAD Editor") static bool UpdateSettingsKeyLabels();
