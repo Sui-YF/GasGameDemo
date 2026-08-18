@@ -26,9 +26,11 @@
 #include "Camera/CameraActor.h"
 #include "Camera/PlayerCameraManager.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/UnrealType.h"
 
 ACVADEnemyCharacter::ACVADEnemyCharacter()
 {
+    PrimaryActorTick.bCanEverTick = true;
     bReplicates = true;
     SetReplicateMovement(true);
     AIControllerClass = ACVADEnemyAIController::StaticClass();
@@ -53,6 +55,66 @@ ACVADEnemyCharacter::ACVADEnemyCharacter()
 UAbilitySystemComponent* ACVADEnemyCharacter::GetAbilitySystemComponent() const
 {
     return AbilitySystemComponent;
+}
+
+void ACVADEnemyCharacter::Tick(float DeltaSeconds)
+{
+    Super::Tick(DeltaSeconds);
+    UpdateMinionLocomotion();
+}
+
+void ACVADEnemyCharacter::UpdateMinionLocomotion()
+{
+    if (!GetMesh() || bIsBoss || bDeathHandled || bRagdollFrozen) return;
+    UAnimInstance* AnimInstance = GetMesh()->GetAnimInstance();
+    if (!AnimInstance) return;
+
+    const float Speed = GetVelocity().Size2D();
+    SetAnimInstanceFloat(AnimInstance, TEXT("Speed"), Speed);
+    SetAnimInstanceFloat(AnimInstance, TEXT("MoveSpeed"), Speed);
+    SetAnimInstanceFloat(AnimInstance, TEXT("Direction"), 0.f);
+    SetAnimInstanceBool(AnimInstance, TEXT("bIsInAir"), false);
+    SetAnimInstanceBool(AnimInstance, TEXT("IsInAir"), false);
+    SetAnimInstanceBool(AnimInstance, TEXT("bIsCrouching"), false);
+    SetAnimInstanceBool(AnimInstance, TEXT("bIsCrouched"), false);
+
+    if (!bMinionAnimVarsLogged)
+    {
+        bMinionAnimVarsLogged = true;
+        const bool bSpeedFound = FindFProperty<FFloatProperty>(AnimInstance->GetClass(), TEXT("Speed"))
+            || FindFProperty<FIntProperty>(AnimInstance->GetClass(), TEXT("Speed"))
+            || FindFProperty<FDoubleProperty>(AnimInstance->GetClass(), TEXT("Speed"));
+        UE_LOG(LogTemp, Log, TEXT("Minion %s AnimClass=%s SpeedProp=%s"),
+            *GetName(),
+            AnimInstance->GetClass() ? *AnimInstance->GetClass()->GetName() : TEXT("None"),
+            bSpeedFound ? TEXT("found") : TEXT("missing"));
+    }
+}
+
+void ACVADEnemyCharacter::SetAnimInstanceFloat(UAnimInstance* AnimInstance, FName PropertyName, float Value)
+{
+    if (!AnimInstance) return;
+    if (FFloatProperty* Property = FindFProperty<FFloatProperty>(AnimInstance->GetClass(), PropertyName))
+    {
+        Property->SetPropertyValue_InContainer(AnimInstance, Value);
+    }
+    else if (FIntProperty* IntProperty = FindFProperty<FIntProperty>(AnimInstance->GetClass(), PropertyName))
+    {
+        IntProperty->SetPropertyValue_InContainer(AnimInstance, static_cast<int32>(Value));
+    }
+    else if (FDoubleProperty* DoubleProperty = FindFProperty<FDoubleProperty>(AnimInstance->GetClass(), PropertyName))
+    {
+        DoubleProperty->SetPropertyValue_InContainer(AnimInstance, static_cast<double>(Value));
+    }
+}
+
+void ACVADEnemyCharacter::SetAnimInstanceBool(UAnimInstance* AnimInstance, FName PropertyName, bool Value)
+{
+    if (!AnimInstance) return;
+    if (FBoolProperty* Property = FindFProperty<FBoolProperty>(AnimInstance->GetClass(), PropertyName))
+    {
+        Property->SetPropertyValue_InContainer(AnimInstance, Value);
+    }
 }
 
 void ACVADEnemyCharacter::SetSpawnSource(ACVADMinionSpawner* InSpawnSource)
@@ -355,6 +417,17 @@ void ACVADEnemyCharacter::BeginPlay()
         GetMesh()->SetVisibility(true,true);
         GetMesh()->SetComponentTickEnabled(true);
         GetMesh()->GlobalAnimRateScale = EnemyAnimPlayRate;
+        if (!bIsBoss && GetMesh()->GetAnimClass())
+        {
+            // Guard against blueprints whose mesh component was configured in
+            // single-node mode: the ABP must actually drive locomotion.
+            if (GetMesh()->GetAnimationMode() != EAnimationMode::AnimationBlueprint)
+            {
+                GetMesh()->SetAnimationMode(EAnimationMode::AnimationBlueprint);
+                GetMesh()->SetAnimInstanceClass(GetMesh()->GetAnimClass());
+                GetMesh()->InitAnim(true);
+            }
+        }
         if(!bIsBoss && MinionIdleAnimation && !GetMesh()->GetAnimClass())
         {
             // Do not evaluate Manny's AnimBP on the SkeletonArmy skeleton. A compatible
@@ -366,6 +439,8 @@ void ACVADEnemyCharacter::BeginPlay()
             *GetNameSafe(GetMesh()->GetSkeletalMeshAsset()),*GetNameSafe(MinionIdleAnimation),
             GetMesh()->bHiddenInGame?TEXT("true"):TEXT("false"),GetMesh()->IsVisible()?TEXT("true"):TEXT("false"),
             *GetActorLocation().ToCompactString(),*GetActorScale3D().ToCompactString());
+        UE_LOG(LogTemp, Log, TEXT("Enemy %s AnimClass=%s"),
+            *GetName(), GetMesh()->GetAnimClass() ? *GetMesh()->GetAnimClass()->GetName() : TEXT("None"));
     }
     if(AngelWingLeft) AngelWingLeft->SetVisibility(bIsBoss,true);
     if(AngelWingRight) AngelWingRight->SetVisibility(bIsBoss,true);

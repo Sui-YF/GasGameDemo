@@ -41,6 +41,9 @@
 #include "Enemy/CVADBTTask_Combat.h"
 #include "EdGraph/EdGraphPin.h"
 #include "EdGraph/EdGraphSchema.h"
+#include "EdGraphSchema_K2.h"
+#include "K2Node_VariableGet.h"
+#include "K2Node_VariableSet.h"
 #include "AssetRegistry/AssetRegistryModule.h"
 
 namespace
@@ -648,6 +651,75 @@ bool UCVADEditorAssetBuilder::BuildFlyingSwordAnimationBlueprint()
     return true;
 }
 
+static bool EnsureAnimBlueprintFloatVariable(UAnimBlueprint* Blueprint, FName VarName)
+{
+    if (!Blueprint) return false;
+    UE_LOG(LogTemp, Display, TEXT("CVAD minion var check before: vars=%d"), Blueprint->NewVariables.Num());
+    for (const FBPVariableDescription& Variable : Blueprint->NewVariables)
+    {
+        if (Variable.VarName == VarName)
+        {
+            UE_LOG(LogTemp, Display, TEXT("CVAD minion var %s already exists"), *VarName.ToString());
+            return true;
+        }
+    }
+    FEdGraphPinType PinType;
+    // UE 5 stores blueprint floats as PC_Real with the PC_Float sub-category.
+    PinType.PinCategory = UEdGraphSchema_K2::PC_Real;
+    PinType.PinSubCategory = UEdGraphSchema_K2::PC_Float;
+    FBlueprintEditorUtils::AddMemberVariable(Blueprint, VarName, PinType);
+    UE_LOG(LogTemp, Display, TEXT("CVAD minion var %s add requested: vars=%d"),
+        *VarName.ToString(), Blueprint->NewVariables.Num());
+    return true;
+}
+
+// The duplicated LanFang AnimBP keeps its graph nodes but can lose the actual
+// variable declarations. Re-declare the locomotion variables and re-point every
+// existing getter/setter node so the blend space actually receives speed.
+static void RepairMinionLocomotionVariable(UAnimBlueprint* Blueprint)
+{
+    if (!Blueprint) return;
+
+    // The duplicated ABP ships a stale Speed declaration whose pin type no longer
+    // compiles into the generated class. Drop it and re-declare it cleanly.
+    for (int32 Index = Blueprint->NewVariables.Num() - 1; Index >= 0; --Index)
+    {
+        const FBPVariableDescription& Variable = Blueprint->NewVariables[Index];
+        if (Variable.VarName == TEXT("Speed"))
+        {
+            UE_LOG(LogTemp, Display, TEXT("CVAD minion removing stale Speed var (type=%s)"),
+                *Variable.VarType.PinCategory.ToString());
+            FBlueprintEditorUtils::RemoveMemberVariable(Blueprint, Variable.VarName);
+        }
+    }
+    EnsureAnimBlueprintFloatVariable(Blueprint, TEXT("Speed"));
+
+    TArray<UEdGraph*> Graphs;
+    Blueprint->GetAllGraphs(Graphs);
+    for (UEdGraph* Graph : Graphs)
+    {
+        for (UEdGraphNode* Node : Graph->Nodes)
+        {
+            FMemberReference* Reference = nullptr;
+            FName VarName = NAME_None;
+            if (UK2Node_VariableGet* Get = Cast<UK2Node_VariableGet>(Node))
+            {
+                VarName = Get->GetVarName();
+                Reference = &Get->VariableReference;
+            }
+            else if (UK2Node_VariableSet* Set = Cast<UK2Node_VariableSet>(Node))
+            {
+                VarName = Set->GetVarName();
+                Reference = &Set->VariableReference;
+            }
+            if (!Reference || VarName != TEXT("Speed")) continue;
+            Reference->SetSelfMember(TEXT("Speed"));
+        }
+    }
+    UE_LOG(LogTemp, Display, TEXT("CVAD repaired minion locomotion Speed variable in %s"),
+        *Blueprint->GetPathName());
+}
+
 bool UCVADEditorAssetBuilder::BuildMinionAnimationBlueprint()
 {
     UAnimBlueprint* SourceBlueprint=LoadObject<UAnimBlueprint>(nullptr,
@@ -772,6 +844,21 @@ bool UCVADEditorAssetBuilder::DiagnoseAnimationBlueprints()
                 {
                     UE_LOG(LogTemp, Display, TEXT("CVAD_ANIM_DIAG   BlendSpacePlayer blend=%s"),
                         Player->Node.GetBlendSpace() ? *Player->Node.GetBlendSpace()->GetPathName() : TEXT("None"));
+                    for (UEdGraphPin* Pin : Player->Pins)
+                    {
+                        if (!Pin) continue;
+                        FString Links;
+                        for (UEdGraphPin* Linked : Pin->LinkedTo)
+                        {
+                            if (Linked && Linked->GetOwningNode())
+                            {
+                                Links += FString::Printf(TEXT("%s.%s,"),
+                                    *Linked->GetOwningNode()->GetName(), *Linked->PinName.ToString());
+                            }
+                        }
+                        UE_LOG(LogTemp, Display, TEXT("CVAD_ANIM_DIAG     BSPlayer pin=%s dir=%d links=%s"),
+                            *Pin->PinName.ToString(), static_cast<int32>(Pin->Direction), *Links);
+                    }
                 }
                 else if (UAnimGraphNode_LayeredBoneBlend* Blend = Cast<UAnimGraphNode_LayeredBoneBlend>(GraphNode))
                 {
@@ -859,6 +946,10 @@ bool UCVADEditorAssetBuilder::RepairAnimationBlueprints()
             UE_LOG(LogTemp, Warning, TEXT("CVAD_ANIM_REPAIR could not ensure combat slot in %s"), *Blueprint->GetPathName());
             bAllRepaired = false;
         }
+        if (FString(Path).Contains(TEXT("ABP_SkeletonMinion")))
+        {
+            RepairMinionLocomotionVariable(Blueprint);
+        }
         FBlueprintEditorUtils::MarkBlueprintAsStructurallyModified(Blueprint);
         FKismetEditorUtilities::CompileBlueprint(Blueprint);
         Blueprint->MarkPackageDirty();
@@ -870,6 +961,22 @@ bool UCVADEditorAssetBuilder::RepairAnimationBlueprints()
         if (!bSaved) bAllRepaired = false;
         UE_LOG(LogTemp, Display, TEXT("CVAD_ANIM_REPAIR %s saved=%s"),
             *Blueprint->GetPathName(), bSaved ? TEXT("true") : TEXT("false"));
+        if (FString(Path).Contains(TEXT("ABP_SkeletonMinion")))
+        {
+            UClass* GeneratedClass = Blueprint->GeneratedClass;
+            FString Props;
+            if (GeneratedClass)
+            {
+                for (TFieldIterator<FProperty> It(GeneratedClass); It; ++It)
+                {
+                    Props += FString::Printf(TEXT("%s(%s),"), *It->GetName(), *It->GetClass()->GetName());
+                }
+            }
+            UE_LOG(LogTemp, Display, TEXT("CVAD minion generated class %s speed_float=%d props=[%s]"),
+                *GetNameSafe(GeneratedClass),
+                GeneratedClass ? (FindFProperty<FFloatProperty>(GeneratedClass, TEXT("Speed")) ? 1 : 0) : -1,
+                *Props);
+        }
     }
 
     const TArray<TPair<const TCHAR*, const TCHAR*>> SkeletonMeshPairs = {

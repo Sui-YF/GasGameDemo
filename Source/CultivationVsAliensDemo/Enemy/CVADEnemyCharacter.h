@@ -19,6 +19,7 @@ public:
     ACVADEnemyCharacter();
     virtual UAbilitySystemComponent* GetAbilitySystemComponent() const override;
     virtual void BeginPlay() override;
+    virtual void Tick(float DeltaSeconds) override;
     void SetSpawnSource(ACVADMinionSpawner* InSpawnSource);
 
     UFUNCTION(BlueprintPure, Category="Boss") int32 GetBossPhase() const { return BossPhase; }
@@ -35,6 +36,9 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionDeathAnimation();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss|Animation") void PlayBossAttackAnimation();
     UFUNCTION(BlueprintCallable, Category="Ragdoll") void MakeRagdoll();
+    void UpdateMinionLocomotion();
+    void SetAnimInstanceFloat(UAnimInstance* AnimInstance, FName PropertyName, float Value);
+    void SetAnimInstanceBool(UAnimInstance* AnimInstance, FName PropertyName, bool Value);
     UFUNCTION(BlueprintPure, Category="Ragdoll") bool IsRagdollFrozen() const { return bRagdollFrozen; }
     UFUNCTION(BlueprintPure, Category="Boss") bool IsBossDeathSequenceActive() const { return bBossDeathSequenceActive; }
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnEnemyDamaged(float DamageAmount);
@@ -143,6 +147,7 @@ protected:
     FTimerHandle BossSlowMotionRestoreTimer;
     FTimerHandle BossCameraRestoreTimer;
     TWeakObjectPtr<class ACameraActor> DeathCameraActor;
+    bool bMinionAnimVarsLogged = false;
 
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UAbilitySystemComponent> AbilitySystemComponent;
     UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="GAS") TObjectPtr<UCVADAttributeSet> AttributeSet;
