@@ -40,6 +40,8 @@ public:
     UFUNCTION(BlueprintPure, Category="Revive") bool IsPlayerDown() const { return bPlayerDown; }
     UFUNCTION(BlueprintPure, Category="Combat") bool IsPlayerHitStunned() const { return bPlayerHitStunned; }
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Revive") void RevivePlayer(float HealthPercent = 0.5f);
+    UFUNCTION(BlueprintCallable, Category="Ragdoll") void MakePlayerRagdoll();
+    UFUNCTION(BlueprintCallable, Category="Ragdoll") void RestorePlayerRagdoll();
     UFUNCTION(Server, Reliable) void ServerTryReviveNearbyPlayer();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Combat") void BeginTemporaryInvulnerability(float Duration);
     UFUNCTION(BlueprintCallable, Category="Movement") void SetSprinting(bool bNewSprinting);

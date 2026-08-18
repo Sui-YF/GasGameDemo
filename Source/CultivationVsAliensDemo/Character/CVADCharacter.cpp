@@ -6,6 +6,7 @@
 #include "Abilities/GameplayAbility.h"
 #include "AbilitySystem/Abilities/CVADCombatAbility.h"
 #include "Inventory/CVADInventoryComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "Animation/AnimSequenceBase.h"
@@ -272,6 +273,38 @@ void ACVADCharacter::ApplyDownedState()
         PendingActionAnimation = nullptr;
         HandleActionAnimationFinished();
     }
+    if (bPlayerDown) MakePlayerRagdoll();
+    else RestorePlayerRagdoll();
+}
+
+void ACVADCharacter::MakePlayerRagdoll()
+{
+    if (!GetMesh() || !GetCapsuleComponent() || !GetCharacterMovement()) return;
+    GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+    GetMesh()->SetPhysicsBlendWeight(1.f);
+    GetMesh()->SetSimulatePhysics(true);
+    GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+    GetMesh()->SetAllBodiesSimulatePhysics(true);
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    GetCapsuleComponent()->SetSimulatePhysics(false);
+    GetCharacterMovement()->DisableMovement();
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("Player %s became a ragdoll"), *GetName());
+}
+
+void ACVADCharacter::RestorePlayerRagdoll()
+{
+    if (!GetMesh() || !GetCapsuleComponent() || !GetCharacterMovement()) return;
+    GetMesh()->SetSimulatePhysics(false);
+    GetMesh()->SetAllBodiesSimulatePhysics(false);
+    GetMesh()->SetPhysicsBlendWeight(0.f);
+    GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+    GetMesh()->SetCollisionProfileName(TEXT("CharacterMesh"));
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    GetCapsuleComponent()->SetSimulatePhysics(false);
+    GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+    RestoreLocomotionAnimation();
+    UE_LOG(LogCVADAbilityInput, Log, TEXT("Player %s restored from ragdoll"), *GetName());
 }
 
 void ACVADCharacter::BeginPlayerHitStun(float Duration)

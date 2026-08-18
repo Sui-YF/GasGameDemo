@@ -17,3 +17,5 @@ Packaged/
 *.pdb
 *.obj
 .codex-temp/
+Tools/
+Editor/

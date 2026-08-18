@@ -34,6 +34,7 @@ public:
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionHitAnimation();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Minion|Animation") void PlayMinionDeathAnimation();
     UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly, Category="Boss|Animation") void PlayBossAttackAnimation();
+    UFUNCTION(BlueprintCallable, Category="Ragdoll") void MakeRagdoll();
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnEnemyDamaged(float DamageAmount);
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnHitStunChanged(bool bNewHitStunned);
     UFUNCTION(BlueprintImplementableEvent, Category="Combat") void OnAttackTelegraphChanged(bool bActive, FVector Center, float Radius, float Duration);
@@ -54,6 +55,7 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss|Visual") TArray<TObjectPtr<class USkeletalMesh>> BossRoleBodyMeshes;
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayBossAttack(int32 AttackRole);
     UFUNCTION(NetMulticast, Unreliable) void MulticastPlayMinionAnimation(int32 AnimationType);
+    UFUNCTION(NetMulticast, Unreliable) void MulticastRagdoll();
     void RestoreBossAnimationBlueprint();
     void RestoreMinionAnimationBlueprint();
     UPROPERTY(Transient)
@@ -75,6 +77,10 @@ protected:
     /** Bosses move noticeably slower than regular minions so their telegraphed attacks remain readable. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Boss", meta=(ClampMin="0.1", ClampMax="1.0"))
     float BossMoveSpeedMultiplier = 0.55f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Movement", meta=(ClampMin="0.1", ClampMax="1.0"))
+    float EnemyMoveSpeedMultiplier = 0.65f;
+    UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Enemy|Animation", meta=(ClampMin="0.1", ClampMax="2.0"))
+    float EnemyAnimPlayRate = 0.75f;
     UPROPERTY(BlueprintReadOnly, ReplicatedUsing=OnRep_HitStunned, Category="Combat") bool bHitStunned = false;
     UFUNCTION() void OnRep_HitStunned();
     void BeginHitStun(float Duration);

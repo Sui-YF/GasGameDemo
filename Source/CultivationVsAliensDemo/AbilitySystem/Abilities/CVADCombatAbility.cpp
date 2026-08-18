@@ -150,11 +150,13 @@ void UCVADCombatAbility::ActivateAbility(
             if (AbilityInput != ECVADAbilityInput::SwitchStance && !bSpawnHomingSword)
             {
                 const bool bSwordHeavyAttack=AbilityInput==ECVADAbilityInput::HeavyAttack && !Character->IsFlyingSwordMode();
-                const float EffectiveDistance=AttackDistance*(bSwordHeavyAttack?1.15f:1.f);
-                const float HeavySweepRadius=EffectiveRadius*(bSwordHeavyAttack?1.35f:1.f);
+                // Heavy attack is a full-body AOE centered on the character so every
+                // enemy inside the ring takes damage regardless of facing.
+                const float EffectiveDistance=bSwordHeavyAttack?0.f:AttackDistance;
+                const float HeavySweepRadius=EffectiveRadius*(bSwordHeavyAttack?1.6f:1.f);
                 Character->QueueAttackDamage(EffectiveDamage, EffectiveDistance, HeavySweepRadius,
-                    AbilityInput == ECVADAbilityInput::FlyingSword ? true : bThisHitMultiple,
-                    bSwordHeavyAttack);
+                    bSwordHeavyAttack || AbilityInput == ECVADAbilityInput::FlyingSword || bThisHitMultiple,
+                    false);
             }
             Character->PlayReplicatedActionAnimation(AnimationToPlay,
                 AbilityInput == ECVADAbilityInput::HeavyAttack

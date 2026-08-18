@@ -17,6 +17,7 @@
 #include "GameplayTagsManager.h"
 #include "DrawDebugHelpers.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Animation/AnimInstance.h"
 #include "Animation/AnimMontage.h"
 #include "Animation/AnimSequenceBase.h"
@@ -189,6 +190,27 @@ void ACVADEnemyCharacter::RestoreMinionAnimationBlueprint()
     }
 }
 
+void ACVADEnemyCharacter::MakeRagdoll()
+{
+    if (!GetMesh() || !GetCapsuleComponent() || !GetCharacterMovement()) return;
+    GetMesh()->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+    GetMesh()->SetPhysicsBlendWeight(1.f);
+    GetMesh()->SetSimulatePhysics(true);
+    GetMesh()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+    GetMesh()->SetCollisionProfileName(TEXT("Ragdoll"));
+    GetMesh()->SetAllBodiesSimulatePhysics(true);
+    GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+    GetCapsuleComponent()->SetSimulatePhysics(false);
+    GetCharacterMovement()->DisableMovement();
+    if (AAIController* AI = Cast<AAIController>(GetController())) AI->StopMovement();
+    UE_LOG(LogTemp, Log, TEXT("Enemy %s became a ragdoll"), *GetName());
+}
+
+void ACVADEnemyCharacter::MulticastRagdoll_Implementation()
+{
+    MakeRagdoll();
+}
+
 void ACVADEnemyCharacter::OnRep_BossRole(){ApplyBossRoleVisuals();OnBossRoleChanged(BossRole);}
 
 void ACVADEnemyCharacter::ApplyBossRoleVisuals()
@@ -208,6 +230,7 @@ void ACVADEnemyCharacter::BeginPlay()
         GetMesh()->SetHiddenInGame(false);
         GetMesh()->SetVisibility(true,true);
         GetMesh()->SetComponentTickEnabled(true);
+        GetMesh()->GlobalAnimRateScale = EnemyAnimPlayRate;
         if(!bIsBoss && MinionIdleAnimation && !GetMesh()->GetAnimClass())
         {
             // Do not evaluate Manny's AnimBP on the SkeletonArmy skeleton. A compatible
@@ -254,7 +277,7 @@ void ACVADEnemyCharacter::BeginPlay()
     {
         AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetMaxHealthAttribute(), Row->MaxHealth);
         AbilitySystemComponent->SetNumericAttributeBase(UCVADAttributeSet::GetHealthAttribute(), Row->MaxHealth);
-        GetCharacterMovement()->MaxWalkSpeed = Row->MoveSpeed;
+        GetCharacterMovement()->MaxWalkSpeed = Row->MoveSpeed * EnemyMoveSpeedMultiplier;
         if (bIsBoss)
         {
             GetCharacterMovement()->MaxWalkSpeed *= BossMoveSpeedMultiplier;
@@ -331,6 +354,7 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
     bDeathHandled = true;
     if (ACVADEnemyAIController* AI = Cast<ACVADEnemyAIController>(GetController())) AI->CancelPendingAttack();
     if (!bIsBoss) PlayMinionDeathAnimation();
+    MulticastRagdoll();
     if (bIsBoss) for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It) { It->CompleteBossBattle(this); break; }
     if (SpawnSource.IsValid()) SpawnSource->NotifySpawnedMinionDefeated(this);
     for (TActorIterator<ACVADBattleDirector> It(GetWorld()); It; ++It)
@@ -345,10 +369,7 @@ void ACVADEnemyCharacter::HandleHealthChanged(const FOnAttributeChangeData& Chan
         if (ACVADPlayerState* RewardPlayerState = It->Get() ? It->Get()->GetPlayerState<ACVADPlayerState>() : nullptr)
             RewardPlayerState->AddExperience(ExperienceReward);
     }
-    const float DeathDuration = (!bIsBoss && MinionDeathAnimation)
-        ? FMath::Max(MinionDeathAnimation->GetPlayLength(), 0.1f) + 0.15f
-        : 0.05f;
-    SetLifeSpan(DeathDuration);
+    SetLifeSpan(5.f);
 }
 
 void ACVADEnemyCharacter::EvaluateBossPhase(float CurrentHealth)
