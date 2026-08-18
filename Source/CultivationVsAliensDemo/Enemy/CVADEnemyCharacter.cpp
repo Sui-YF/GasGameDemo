@@ -89,7 +89,7 @@ void ACVADEnemyCharacter::MulticastPlayBossAttack_Implementation(int32 AttackRol
     {
         AnimInstance->SetRootMotionMode(ERootMotionMode::RootMotionFromMontagesOnly);
         UAnimMontage* BossMontage = AnimInstance->PlaySlotAnimationAsDynamicMontage(
-            Sequence, FAnimSlotGroup::DefaultSlotName, 0.1f, 0.25f, 1.f, 1);
+            Sequence, TEXT("FullBody"), 0.1f, 0.25f, 1.f, 1);
         if (BossMontage)
         {
             bPlayedRootMotionMontage = true;
@@ -99,7 +99,7 @@ void ACVADEnemyCharacter::MulticastPlayBossAttack_Implementation(int32 AttackRol
         else
         {
             UE_LOG(LogTemp, Warning,
-                TEXT("Boss %s AnimBP has no DefaultSlot; falling back to in-place animation %s"),
+                TEXT("Boss %s AnimBP has no FullBody slot; falling back to in-place animation %s"),
                 *GetName(), *GetNameSafe(Sequence));
         }
     }
@@ -159,7 +159,7 @@ void ACVADEnemyCharacter::MulticastPlayMinionAnimation_Implementation(int32 Anim
     {
         AnimInstance->SetRootMotionMode(ERootMotionMode::IgnoreRootMotion);
         if (AnimInstance->PlaySlotAnimationAsDynamicMontage(
-            Sequence, FAnimSlotGroup::DefaultSlotName, 0.05f, 0.12f, 1.f, 1))
+            Sequence, TEXT("FullBody"), 0.05f, 0.12f, 1.f, 1))
         {
             GetWorldTimerManager().ClearTimer(MinionAnimationRestoreTimer);
             GetWorldTimerManager().SetTimer(MinionAnimationRestoreTimer, this,

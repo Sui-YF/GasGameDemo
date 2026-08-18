@@ -414,8 +414,7 @@ bool FCVADGauntletFullPlaythroughTest::RunTest(const FString&)
     CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Objectives/BP_MinionSpawner.BP_MinionSpawner"));
     CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Characters/BP_LanfangCharacter.BP_LanfangCharacter"));
     CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Characters/BP_TPPMinion.BP_TPPMinion"));
-    CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Characters/BP_TPPMinionCaptain.BP_TPPMinionCaptain"));
-    CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Characters/BP_TPPMinionBoss.BP_TPPMinionBoss"));
+    CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Characters/BP_SkeletonMinion.BP_SkeletonMinion"));
     CheckAsset(*this, TEXT("/Game/CVAD/Blueprints/Characters/BP_AngelBoss.BP_AngelBoss"));
     CheckAsset(*this, TEXT("/Game/CVAD/Input/IMC_Player.IMC_Player"));
     CheckAsset(*this, TEXT("/Game/CVAD/UI/WBP_MainMenu.WBP_MainMenu"));
