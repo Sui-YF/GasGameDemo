@@ -51,11 +51,11 @@ protected:
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Outfit Preview") FRotator OutfitPreviewCameraRotation = FRotator(0.f, 180.f, 0.f);
     /** Skill preview camera (distance/height/yaw around the character), editable in WBP_SkillTree Class Defaults. */
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Skill Preview", meta=(ClampMin="70.0", ClampMax="500.0"))
-    float SkillPreviewCameraDistance = 210.f;
+    float SkillPreviewCameraDistance = 246.f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Skill Preview", meta=(ClampMin="20.0", ClampMax="280.0"))
-    float SkillPreviewCameraHeight = 90.f;
+    float SkillPreviewCameraHeight = 106.f;
     UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="UI|Skill Preview", meta=(ClampMin="-180.0", ClampMax="180.0"))
-    float SkillPreviewCameraYawDegrees = 0.f;
+    float SkillPreviewCameraYawDegrees = 33.f;
 
     UFUNCTION(BlueprintImplementableEvent, Category="UI") void OnPlayerDataReady();
 private:
@@ -122,9 +122,9 @@ private:
     int32 PreviewOutfitParts[7] = {0,0,0,0,0,0,0};
     UPROPERTY(Transient) TObjectPtr<ACVADCharacter> OutfitPreviewCharacter;
     UPROPERTY(Transient) TObjectPtr<ACVADCharacter> SkillPreviewCharacter;
-    float SkillPreviewCameraDistanceDebug = 210.f;
-    float SkillPreviewCameraHeightDebug = 90.f;
-    float SkillPreviewCameraYawDegreesDebug = 0.f;
+    float SkillPreviewCameraDistanceDebug = 246.f;
+    float SkillPreviewCameraHeightDebug = 106.f;
+    float SkillPreviewCameraYawDegreesDebug = 33.f;
     bool bSkillPreviewDebugMode = false;
     void ChangeOutfitPart(int32 Part,int32 Direction);
 };
